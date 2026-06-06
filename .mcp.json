@@ -1,10 +1,11 @@
 {
   "mcpServers": {
-    "reddit": {
+    "ecom-research": {
       "command": "node",
       "args": ["./dist/index.js"],
       "env": {
-        "REDDIT_AUTH_MODE": "auto"
+        "REDDIT_AUTH_MODE": "auto",
+        "FACEBOOK_ENGINE": "browser"
       }
     }
   }

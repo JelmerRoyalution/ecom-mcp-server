@@ -5,8 +5,19 @@ import { Option } from "functype"
 import { z } from "zod"
 
 import { getRedditClient, initializeRedditClient } from "./client/reddit-client"
+import { type BrowserKey, extractFacebookSession } from "./facebook/cookie-extractor"
+import { buildSessionFromCookies, buildSessionFromParts } from "./facebook/cookies"
+import { isPlaywrightAvailable } from "./facebook/engines"
+import { getFacebookClient, initializeFacebookClient } from "./facebook/facebook-client"
+import { formatFeed, formatGroupInfo, formatGroupSearch, formatPostComments } from "./facebook/format"
+import type { FacebookEngine, FacebookSession } from "./facebook/types"
+import { buildPersonaBrief, mineVoiceOfCustomer } from "./persona/schwartz"
 import type { BotDisclosureConfig, CacheConfig, RedditAuthMode, RedditSafeMode, SafeModeConfig } from "./types"
 import { formatPostInfo, formatSubredditInfo, formatUserInfo } from "./utils/formatters"
+
+// A current desktop Chrome UA — used for Facebook fetches when none is provided.
+const DEFAULT_FACEBOOK_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 // Load environment variables
 dotenv.config({ quiet: true })
@@ -79,6 +90,111 @@ function buildSafeModeConfig(safeMode: RedditSafeMode): SafeModeConfig {
 
 function unwrapClient() {
   return getRedditClient().orThrow(new Error("Reddit client not initialized"))
+}
+
+function unwrapFacebookClient() {
+  return getFacebookClient().orThrow(
+    new Error("Facebook client not initialized — restart the server with Facebook support enabled."),
+  )
+}
+
+// Build a Facebook session from env: explicit cookie, discrete parts, or — when
+// FACEBOOK_COOKIE_FROM is set — auto-extracted from a locally logged-in browser.
+async function resolveFacebookSession(): Promise<FacebookSession | undefined> {
+  const cookie = process.env.FACEBOOK_COOKIE
+  if (cookie !== undefined && cookie.trim() !== "") {
+    return buildSessionFromCookies(cookie).fold(
+      (err) => {
+        console.error(`[Facebook] ${err.message}`)
+        return undefined
+      },
+      (session) => session,
+    )
+  }
+
+  const cUser = process.env.FACEBOOK_C_USER
+  const xs = process.env.FACEBOOK_XS
+  if (cUser !== undefined || xs !== undefined) {
+    return buildSessionFromParts({ cUser, xs, datr: process.env.FACEBOOK_DATR }).fold(
+      (err) => {
+        console.error(`[Facebook] ${err.message}`)
+        return undefined
+      },
+      (session) => session,
+    )
+  }
+
+  // Auto-pickup from a logged-in browser (e.g. FACEBOOK_COOKIE_FROM=chrome).
+  const from = process.env.FACEBOOK_COOKIE_FROM
+  if (from !== undefined && from.trim() !== "") {
+    try {
+      const { session, cookieNames } = await extractFacebookSession({
+        browser: from.trim() as BrowserKey,
+        profile: process.env.FACEBOOK_COOKIE_FROM_PROFILE ?? "Default",
+      })
+      console.error(`[Facebook] ✓ Auto-loaded session from ${from} (${cookieNames.length} cookies)`)
+      return session
+    } catch (err) {
+      console.error(
+        `[Facebook] Could not auto-read cookies from ${from}: ${err instanceof Error ? err.message : String(err)}`,
+      )
+      return undefined
+    }
+  }
+
+  return undefined
+}
+
+// Initialize the Facebook scraping client (always available; auth via session cookies).
+async function setupFacebookClient(): Promise<void> {
+  const engine = (process.env.FACEBOOK_ENGINE ?? "auto") as FacebookEngine
+  if (!["auto", "http", "browser"].includes(engine)) {
+    console.error(`[Error] Invalid FACEBOOK_ENGINE: ${engine}`)
+    console.error("[Error] Valid options are: auto, http, browser")
+    process.exit(1)
+  }
+
+  const session = await resolveFacebookSession()
+  const minDelayRaw = Number(process.env.FACEBOOK_MIN_DELAY_MS ?? "4000")
+  const cacheEnabled = (process.env.FACEBOOK_CACHE ?? "on") !== "off"
+  const cacheMaxMb = Number(process.env.FACEBOOK_CACHE_MAX_MB ?? "50")
+
+  initializeFacebookClient({
+    session,
+    engine,
+    userAgent: process.env.FACEBOOK_USER_AGENT ?? DEFAULT_FACEBOOK_UA,
+    minDelayMs: Number.isFinite(minDelayRaw) && minDelayRaw >= 0 ? minDelayRaw : 4000,
+    headless: (process.env.FACEBOOK_HEADLESS ?? "true") !== "false",
+    locale: process.env.FACEBOOK_LOCALE ?? "en_US",
+    cache: {
+      enabled: cacheEnabled,
+      maxBytes: (Number.isFinite(cacheMaxMb) && cacheMaxMb > 0 ? cacheMaxMb : 50) * 1024 * 1024,
+    },
+  })
+
+  console.error("[Setup] Facebook client initialized")
+  console.error(`[Setup] Facebook engine: ${engine}`)
+  if (session !== undefined) {
+    console.error(`[Setup] ✓ Facebook session loaded (c_user=${session.cUser}) — private groups accessible if joined`)
+  } else {
+    console.error("[Setup] Facebook: no session cookies — only limited public reads will work")
+    console.error("[Setup] Set FACEBOOK_COOKIE (full cookie header) to scrape groups you are a member of")
+  }
+
+  if (engine === "browser" || engine === "auto") {
+    const hasPlaywright = await isPlaywrightAvailable()
+    if (hasPlaywright) {
+      console.error("[Setup] ✓ Playwright detected — browser engine available (best for private groups)")
+    } else if (engine === "browser") {
+      console.error("[Setup] ✗ FACEBOOK_ENGINE=browser but Playwright is not installed")
+      console.error("[Setup]   Install with: npm install playwright && npx playwright install chromium")
+    } else {
+      console.error("[Setup] Playwright not installed — Facebook will use the lightweight HTTP engine")
+      console.error(
+        "[Setup]   For private groups & full comments: npm install playwright && npx playwright install chromium",
+      )
+    }
+  }
 }
 
 // Initialize Reddit client
@@ -207,9 +323,10 @@ if (process.env.OAUTH_ENABLED === "true" && process.env.OAUTH_TOKEN === undefine
 const server = new FastMCP({
   name: "reddit-mcp-server",
   version: VERSION,
-  instructions: `A comprehensive Reddit MCP server that provides tools for interacting with Reddit API.
+  instructions: `An e-commerce customer-research MCP server. It scrapes discussions from Reddit AND Facebook
+groups, then turns them into customer personas using Eugene Schwartz's "Breakthrough Advertising" framework.
 
-Available capabilities:
+Reddit capabilities:
 - Fetch Reddit posts, comments, and user information
 - Get subreddit details and statistics
 - Search Reddit content across posts and subreddits
@@ -218,7 +335,26 @@ Available capabilities:
 - Delete your own posts and comments (with authentication)
 - Analyze engagement metrics and community insights
 
-For write operations (posting, replying, editing, deleting), ensure REDDIT_USERNAME and REDDIT_PASSWORD are configured.
+Facebook capabilities (tools prefixed facebook_*):
+- Scrape posts from public AND private Facebook groups (private groups need a FACEBOOK_COOKIE session
+  belonging to a member; the optional Playwright browser engine is most reliable)
+- Scrape comment threads from Facebook posts
+- Get group metadata and search for groups by niche
+- Scrape public Facebook Page feeds
+
+Customer-persona workflow (Schwartz "Breakthrough Advertising"):
+- analyze_voice_of_customer: mine a corpus of comments/posts into pains, desires, objections, questions,
+  emotional triggers, product mentions, and verbatim quotes
+- build_customer_persona: assemble a persona brief organized by mass desire, the 5 awareness stages, and
+  the 5 market-sophistication levels — then synthesize the persona from that evidence
+- These persona tools are platform-agnostic: feed them text scraped from Reddit, Facebook, or both.
+
+For Reddit write operations (posting, replying, editing, deleting), ensure REDDIT_USERNAME and REDDIT_PASSWORD are configured.
+
+IMPORTANT — research data ethics:
+- Scraped discussion is for aggregate customer-persona research only. Do NOT de-anonymize, profile, or
+  re-identify individuals, and do NOT republish people's verbatim posts/comments as-is.
+- Respect Facebook's and Reddit's Terms; only access private groups you are legitimately a member of.
 
 IMPORTANT - Reddit Responsible Builder Policy compliance:
 - Data retrieved via these tools must NOT be used for AI model training without Reddit's written approval
@@ -1044,9 +1180,249 @@ ${comment.body}
   },
 })
 
+// ───────────────────────────── Facebook tools ─────────────────────────────
+// These scrape public & private Facebook GROUPS (and Pages) for e-commerce customer
+// research. Private groups require FACEBOOK_COOKIE from a logged-in account that is a
+// member of the group, ideally with the optional Playwright browser engine installed.
+
+server.addTool({
+  name: "test_facebook_connection",
+  description: "Check Facebook scraping configuration: session, engine, and Playwright availability.",
+  parameters: z.object({}),
+  execute: async () => {
+    const client = getFacebookClient()
+    const hasClient = client.fold(
+      () => false,
+      () => true,
+    )
+    if (!hasClient) {
+      return "Facebook client not initialized."
+    }
+    const fb = client.orThrow(new Error("Facebook client not initialized"))
+    const engine = await fb.engineName()
+    const playwright = await isPlaywrightAvailable()
+
+    return `Facebook Scraper Status:
+- Session (cookies): ${fb.hasSession() ? "✓ loaded" : "✗ none (set FACEBOOK_COOKIE for groups)"}
+- Active engine: ${engine}
+- Playwright browser engine: ${playwright ? "✓ available" : "✗ not installed"}
+- Private groups: ${fb.hasSession() ? "accessible if this account is a member" : "unavailable without a session"}
+
+${playwright ? "" : "Tip: for private groups & full comment threads, run: npm install playwright && npx playwright install chromium"}`
+  },
+})
+
+server.addTool({
+  name: "facebook_get_group_posts",
+  description:
+    "Scrape recent posts from a public or private Facebook group's feed. Private groups require a " +
+    "FACEBOOK_COOKIE session belonging to a member. Use this to gather customer discussions for persona research.",
+  parameters: z.object({
+    group: z.string().describe("Group id, slug, or full URL (e.g. '123456789' or a facebook.com/groups/... link)"),
+    limit: z.number().min(1).max(100).default(25).describe("Maximum number of posts to retrieve"),
+  }),
+  execute: async (args) => {
+    const fb = unwrapFacebookClient()
+    const result = await fb.getGroupFeed(args.group, args.limit)
+    return result.fold(
+      (err) => {
+        // eslint-disable-next-line functype/prefer-either
+        throw new Error(err.message)
+      },
+      (posts) => formatFeed(`Facebook Group Feed: ${args.group}`, posts),
+    )
+  },
+})
+
+server.addTool({
+  name: "facebook_get_post_comments",
+  description:
+    "Scrape the comment thread of a specific Facebook post (group or page). Pass the post's permalink URL. " +
+    "Full threads with nested replies are most reliable with the Playwright browser engine.",
+  parameters: z.object({
+    post_url: z.string().describe("The Facebook post permalink URL"),
+    limit: z.number().min(1).max(500).default(100).describe("Maximum number of comments to retrieve"),
+  }),
+  execute: async (args) => {
+    const fb = unwrapFacebookClient()
+    const result = await fb.getPostComments(args.post_url, args.limit)
+    return result.fold(
+      (err) => {
+        // eslint-disable-next-line functype/prefer-either
+        throw new Error(err.message)
+      },
+      (data) => formatPostComments(data),
+    )
+  },
+})
+
+server.addTool({
+  name: "facebook_get_group_info",
+  description: "Get metadata about a Facebook group: name, privacy (public/private), member count, and description.",
+  parameters: z.object({
+    group: z.string().describe("Group id, slug, or full URL"),
+  }),
+  execute: async (args) => {
+    const fb = unwrapFacebookClient()
+    const result = await fb.getGroupInfo(args.group)
+    return result.fold(
+      (err) => {
+        // eslint-disable-next-line functype/prefer-either
+        throw new Error(err.message)
+      },
+      (group) => formatGroupInfo(group),
+    )
+  },
+})
+
+server.addTool({
+  name: "facebook_search_groups",
+  description:
+    "Search Facebook for groups matching a query (e.g. a product niche). Returns group names and URLs to feed " +
+    "into facebook_get_group_posts. Most reliable with a logged-in session + browser engine.",
+  parameters: z.object({
+    query: z.string().describe("Search query, e.g. a product niche or interest"),
+    limit: z.number().min(1).max(50).default(20).describe("Maximum number of groups to return"),
+  }),
+  execute: async (args) => {
+    const fb = unwrapFacebookClient()
+    if (args.query.trim() === "") {
+      // eslint-disable-next-line functype/prefer-either
+      throw new Error("Search query cannot be empty")
+    }
+    const result = await fb.searchGroups(args.query, args.limit)
+    return result.fold(
+      (err) => {
+        // eslint-disable-next-line functype/prefer-either
+        throw new Error(err.message)
+      },
+      (groups) => formatGroupSearch(args.query, groups),
+    )
+  },
+})
+
+server.addTool({
+  name: "facebook_get_page_posts",
+  description:
+    "Scrape recent posts from a public Facebook Page feed (e.g. a brand or competitor page). " +
+    "Pages are public, so this works without a session in most regions.",
+  parameters: z.object({
+    page: z.string().describe("Page name, slug, or full URL (e.g. 'nike' or a facebook.com/... link)"),
+    limit: z.number().min(1).max(100).default(25).describe("Maximum number of posts to retrieve"),
+  }),
+  execute: async (args) => {
+    const fb = unwrapFacebookClient()
+    const result = await fb.getPageFeed(args.page, args.limit)
+    return result.fold(
+      (err) => {
+        // eslint-disable-next-line functype/prefer-either
+        throw new Error(err.message)
+      },
+      (posts) => formatFeed(`Facebook Page Feed: ${args.page}`, posts),
+    )
+  },
+})
+
+// ──────────────── Customer persona tools (Schwartz framework) ────────────────
+// Platform-agnostic: feed in comments/posts scraped from Facebook AND/OR Reddit.
+
+server.addTool({
+  name: "analyze_voice_of_customer",
+  description:
+    "Mine a corpus of customer discussion (Facebook/Reddit comments, posts) into voice-of-customer buckets: " +
+    "pains, desires, objections, questions, emotional triggers, product mentions, recurring phrases, and verbatim quotes.",
+  parameters: z.object({
+    texts: z.array(z.string()).min(1).describe("Array of raw text snippets (comments/posts) to analyze"),
+  }),
+  execute: (args) => {
+    const voc = mineVoiceOfCustomer(args.texts)
+    const list = (items: readonly string[]) =>
+      items.length === 0 ? "_(none detected)_" : items.map((i) => `- ${i}`).join("\n")
+    return Promise.resolve(`# Voice of Customer Analysis
+
+_Analyzed ${args.texts.length} item(s)._
+
+## Pains & Frustrations
+${list(voc.pains)}
+
+## Desires
+${list(voc.desires)}
+
+## Objections & Skepticism
+${list(voc.objections)}
+
+## Questions
+${list(voc.questions)}
+
+## Emotional Triggers
+${list(voc.emotionalTriggers)}
+
+## Product / Solution Mentions
+${list(voc.productMentions)}
+
+## Recurring Phrases (their words)
+${list(voc.vocabulary)}
+
+## Verbatim Quotes
+${list(voc.quotes)}`)
+  },
+})
+
+server.addTool({
+  name: "build_customer_persona",
+  description:
+    "Build a Schwartz 'Breakthrough Advertising' customer persona brief from customer discussion. Provide raw " +
+    "'texts' (comments/posts from Facebook or Reddit) and/or a 'facebook_group' to auto-scrape. Returns mined " +
+    "evidence organized into mass desire, awareness stages, and market sophistication, with synthesis instructions.",
+  parameters: z.object({
+    texts: z.array(z.string()).default([]).describe("Raw customer discussion snippets to analyze (comments/posts)"),
+    facebook_group: z
+      .string()
+      .optional()
+      .describe("Optional Facebook group id/slug/URL — its feed posts are scraped and added to the corpus"),
+    facebook_post_limit: z.number().min(1).max(100).default(30).describe("Posts to scrape when facebook_group is set"),
+    product_context: z.string().optional().describe("Optional product/niche context to frame the persona"),
+  }),
+  execute: async (args) => {
+    const group = args.facebook_group?.trim() ?? ""
+    const scraped: readonly string[] =
+      group !== ""
+        ? await (async () => {
+            const fb = unwrapFacebookClient()
+            const result = await fb.getGroupFeed(group, args.facebook_post_limit)
+            return result.fold(
+              (err) => {
+                console.error(`[Facebook] persona scrape warning: ${err.message}`)
+                return [] as readonly string[]
+              },
+              (posts) => posts.map((p) => p.text).filter((t) => t.trim().length > 0),
+            )
+          })()
+        : []
+
+    const texts = [...args.texts, ...scraped]
+    if (texts.length === 0) {
+      // eslint-disable-next-line functype/prefer-either
+      throw new Error("Provide 'texts' and/or a 'facebook_group' with accessible posts to build a persona.")
+    }
+
+    const sourceLabel =
+      group !== ""
+        ? `Facebook group "${group}" (${scraped.length} posts)${args.texts.length > 0 ? " + supplied texts" : ""}`
+        : "supplied discussion corpus"
+
+    return buildPersonaBrief({
+      texts,
+      productContext: args.product_context,
+      sourceLabel,
+    })
+  },
+})
+
 // Initialize and start server
 async function main() {
   await setupRedditClient()
+  await setupFacebookClient()
 
   const useHttp = process.env.TRANSPORT_TYPE === "httpStream" || process.env.TRANSPORT_TYPE === "http"
   const port = parseInt(process.env.PORT ?? "3000")

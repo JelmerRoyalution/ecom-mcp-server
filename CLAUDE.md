@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Reddit MCP (Model Context Protocol) server that provides tools for interacting with the Reddit API. It's built with TypeScript and uses FastMCP to expose Reddit functionality as tools that can be used by AI assistants.
+This is an e-commerce customer-research MCP (Model Context Protocol) server. It began as a Reddit MCP server and has been expanded to **also scrape public and private Facebook groups**, and to turn scraped discussions into **customer personas using Eugene Schwartz's "Breakthrough Advertising" framework**. It's built with TypeScript and uses FastMCP to expose Reddit, Facebook, and persona-building tools to AI assistants.
+
+> Note: the npm package is still named `reddit-mcp-server` (the published identity / `mcpName` is unchanged); the repository directory is `ecom-mcp-server` reflecting the broadened scope.
 
 ## Available Tools
 
@@ -31,6 +33,24 @@ This is a Reddit MCP (Model Context Protocol) server that provides tools for int
 - `edit_comment` - Edit your own Reddit comment
 - `delete_post` - **PERMANENTLY** delete your own Reddit post (cannot be undone!)
 - `delete_comment` - **PERMANENTLY** delete your own Reddit comment (cannot be undone!)
+
+### Facebook Tools (Scraping)
+
+Scrape public and private Facebook groups/pages for customer-discussion research. Private groups require a `FACEBOOK_COOKIE` session belonging to a member of the group; the optional Playwright **browser engine** is the most reliable path (Facebook's Groups Graph API was removed in April 2024 and `mbasic` was largely retired in Dec 2024, so authenticated-session scraping is the only viable route).
+
+- `facebook_get_group_posts` - Scrape recent posts from a group's feed (public or private)
+- `facebook_get_post_comments` - Scrape the comment thread of a Facebook post (by permalink URL)
+- `facebook_get_group_info` - Group metadata: name, privacy, member count, description
+- `facebook_search_groups` - Search Facebook for groups by niche
+- `facebook_get_page_posts` - Scrape a public Facebook Page feed
+- `test_facebook_connection` - Report session/engine/Playwright status
+
+### Customer Persona Tools (Schwartz "Breakthrough Advertising")
+
+Platform-agnostic — feed them text scraped from Reddit, Facebook, or both.
+
+- `analyze_voice_of_customer` - Mine a corpus into pains, desires, objections, questions, emotional triggers, product mentions, recurring phrases, and verbatim quotes
+- `build_customer_persona` - Produce a persona brief organized by **mass desire**, the **5 awareness stages**, and the **5 market-sophistication levels**, with synthesis instructions for the LLM. Accepts raw `texts` and/or a `facebook_group` to auto-scrape.
 
 ### Server Modes
 
@@ -94,6 +114,23 @@ pnpm lint:fix
    - `search-tools.ts`: Reddit search functionality
 
 3. **Type Definitions** (`src/types.ts`): Comprehensive TypeScript types for all Reddit entities
+
+4. **Facebook Module** (`src/facebook/`): Self-contained Facebook scraping subsystem:
+   - `facebook-client.ts`: Singleton client (mirrors the Reddit client's `Either`/`Option` pattern) — engine selection, request pacing, response caching, URL building. Methods: `getGroupFeed`, `getPostComments`, `getGroupInfo`, `getPageFeed`, `searchGroups`.
+   - `engines.ts`: Pluggable fetch engines behind `FacebookFetchEngine`. `HttpFetchEngine` (native `fetch` against `mbasic.facebook.com`) and `BrowserFetchEngine` (lazy-loads the optional `playwright` peer, drives a logged-in Chromium, scrolls + expands comments). `isPlaywrightAvailable()` gates `auto` selection.
+   - `parsers.ts`: The single source of truth that turns Facebook mobile/rendered HTML into structured posts/comments/groups via Cheerio. Tolerant, layered selectors with fallbacks. **Fully unit-tested with fixtures** — both engines feed HTML into these same parsers.
+   - `cookies.ts`: Parse/validate session cookies (requires `c_user` + `xs`).
+   - `cookie-extractor.ts`: **Auto-grabs the Facebook login from a locally installed, logged-in browser** (Chrome/Brave/Edge/Arc/Chromium/Vivaldi/Opera) so users never copy‑paste cookies. Two strategies: (1) **direct decryption** on macOS/Linux — reads the cookie SQLite DB (`sqlite3` CLI) + the OS keychain "Safe Storage" key (`security` on macOS) + AES‑128‑CBC, stripping the newer 32‑byte `sha256(host_key)` prefix; (2) a **Playwright fallback** that lets the real browser binary decrypt its own cookies (covers Windows DPAPI/App‑Bound). Used by `pnpm run setup` (writes `.env`) and by the runtime `FACEBOOK_COOKIE_FROM` option.
+   - `format.ts`: Markdown formatters for tool output.
+   - `types.ts`: Facebook domain + config types.
+
+   **Onboarding:** `pnpm run setup` (script: `scripts/setup.ts`) detects the user's browser, extracts their Facebook session, and writes `FACEBOOK_COOKIE` + `FACEBOOK_ENGINE=browser` to `.env`. NB: `pnpm setup` (without `run`) is a reserved pnpm builtin — always use `pnpm run setup`.
+
+5. **Persona Module** (`src/persona/schwartz.ts`): Deterministic voice-of-customer text mining + the Schwartz "Breakthrough Advertising" structuring (awareness distribution, sophistication level, mass desire). **Extraction is deterministic here; synthesis is delegated to the calling LLM** via `buildPersonaBrief`. Platform-agnostic and fully unit-tested.
+
+> **Imperative-boundary convention:** `parsers.ts`, `engines.ts`, and `schwartz.ts` carry an `eslint-disable` header for the functype style rules (same convention as `reddit-client.ts`/`response-cache.ts`) because DOM-walking, external IO, and lexicon scanning are inherently imperative.
+
+> **Optional Playwright peer:** `playwright` is NOT a hard dependency (keeps the base install light and avoids a Chromium download for Reddit-only users). It is lazy-loaded via an indirect dynamic import and marked `deps.neverBundle` in `tsdown.config.ts`. The Facebook tools degrade to the HTTP engine and give actionable install guidance when it's absent.
 
 ### Authentication Flow
 
@@ -172,6 +209,22 @@ REDDIT_SAFE_MODE=standard        # Options: off, standard, strict
 # Response Caching (optional, defaults to 'on')
 REDDIT_CACHE=on                  # Options: on, off
 REDDIT_CACHE_MAX_MB=50           # Cache size cap in MB (LRU eviction beyond this)
+
+# Facebook (groups + pages scraping)
+# EASIEST: run `pnpm run setup` to auto-fill FACEBOOK_COOKIE from your browser.
+FACEBOOK_COOKIE=                 # Full Cookie header from a logged-in browser (needs c_user + xs); required for private groups
+# FACEBOOK_COOKIE_FROM=chrome    # Auto-read cookies at startup: chrome|brave|edge|arc|chromium|vivaldi|opera
+# FACEBOOK_COOKIE_FROM_PROFILE=Default
+# FACEBOOK_C_USER=               # Alternative to FACEBOOK_COOKIE: discrete cookie parts
+# FACEBOOK_XS=
+# FACEBOOK_DATR=
+FACEBOOK_ENGINE=auto             # auto (default), http, browser (Playwright)
+# FACEBOOK_HEADLESS=true         # Run browser engine headless (true/false)
+# FACEBOOK_MIN_DELAY_MS=4000     # Min delay between FB requests (anti-bot pacing)
+# FACEBOOK_LOCALE=en_US          # Preferred locale
+# FACEBOOK_USER_AGENT=           # Override the User-Agent
+# FACEBOOK_CACHE=on              # In-memory response cache (on/off)
+# FACEBOOK_CACHE_MAX_MB=50       # Cache size cap in MB
 
 # Transport Configuration
 # TRANSPORT_TYPE=stdio            # Uncomment for stdio mode (default: httpStream for node, stdio for npx/bin)

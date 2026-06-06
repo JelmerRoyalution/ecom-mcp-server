@@ -1,10 +1,10 @@
 {
   "manifest_version": "0.2",
   "name": "reddit-mcp-server",
-  "display_name": "Reddit MCP Server",
-  "version": "1.4.8",
-  "description": "Browse Reddit and create content directly from Claude Desktop. The only Reddit MCP with full write operations.",
-  "long_description": "Reddit MCP Server brings the full Reddit experience to Claude Desktop - not just reading, but writing too.\n\n**Key Features:**\n\n**Read Operations:**\n- Browse any subreddit with sorting options\n- Search Reddit content across all communities\n- Get user profiles with karma and activity\n- Fetch full post details including threaded comments\n- Discover trending subreddits\n\n**Write Operations (Unique!):**\n- Create new posts (text or link)\n- Reply to posts and comments\n- Edit your own posts and comments\n- Delete your own content\n\n**Why Choose Reddit MCP Server:**\n- **Full Write Support** - The only Reddit MCP that lets you post and interact\n- **Safe Mode** - Built-in spam protection to keep your account safe\n- **No API Keys Required** - Works instantly in anonymous mode\n- **Three Auth Tiers** - 10/60/100 requests per minute\n- **FastMCP Powered** - Modern, fast MCP implementation\n\n**Perfect for:**\n- Content creators and community managers\n- Market research and trend analysis\n- Automated posting with safeguards\n- Community engagement",
+  "display_name": "Reddit + Facebook Customer Research MCP",
+  "version": "1.5.0",
+  "description": "Scrape Reddit and Facebook groups (public & private) and build Schwartz 'Breakthrough Advertising' customer personas — directly from Claude.",
+  "long_description": "An e-commerce customer-research MCP server. It scrapes real customer discussions from Reddit AND Facebook groups, then turns them into customer personas using Eugene Schwartz's 'Breakthrough Advertising' framework.\n\n**Reddit (read + write):**\n- Browse/search any subreddit, fetch posts with threaded comments\n- User profiles, trending subreddits\n- Create, reply, edit, delete (with credentials) + Safe Mode spam protection\n\n**Facebook (scraping):**\n- Scrape posts from PUBLIC and PRIVATE Facebook groups (private groups need a logged-in session cookie from a member)\n- Scrape comment threads from posts\n- Group metadata, group search, public Page feeds\n- Lightweight HTTP engine by default; optional Playwright browser engine for private groups and full comment threads\n\n**Customer personas (Schwartz framework):**\n- Mine discussions into voice-of-customer buckets: pains, desires, objections, questions, emotional triggers, verbatim quotes\n- Build a persona brief organized by mass desire, the 5 awareness stages, and the 5 market-sophistication levels\n- Works on Reddit, Facebook, or both\n\n**Perfect for:**\n- E-commerce brands and DTC marketers\n- Customer/audience research and ad copywriting\n- Market and competitor analysis",
   "author": {
     "name": "Jordan Burke",
     "email": "jordan.burke@gmail.com",
@@ -28,7 +28,11 @@
         "REDDIT_PASSWORD": "${user_config.reddit_password}",
         "REDDIT_SAFE_MODE": "${user_config.reddit_safe_mode}",
         "REDDIT_BOT_DISCLOSURE": "${user_config.reddit_bot_disclosure}",
-        "REDDIT_BOT_FOOTER": "${user_config.reddit_bot_footer}"
+        "REDDIT_BOT_FOOTER": "${user_config.reddit_bot_footer}",
+        "FACEBOOK_COOKIE": "${user_config.facebook_cookie}",
+        "FACEBOOK_ENGINE": "${user_config.facebook_engine}",
+        "FACEBOOK_MIN_DELAY_MS": "${user_config.facebook_min_delay_ms}",
+        "FACEBOOK_HEADLESS": "${user_config.facebook_headless}"
       }
     }
   },
@@ -92,9 +96,56 @@
     {
       "name": "delete_comment",
       "description": "Delete your own comment"
+    },
+    {
+      "name": "facebook_get_group_posts",
+      "description": "Scrape posts from a public or private Facebook group"
+    },
+    {
+      "name": "facebook_get_post_comments",
+      "description": "Scrape the comment thread of a Facebook post"
+    },
+    {
+      "name": "facebook_get_group_info",
+      "description": "Get Facebook group metadata (privacy, members, description)"
+    },
+    {
+      "name": "facebook_search_groups",
+      "description": "Search Facebook for groups by niche"
+    },
+    {
+      "name": "facebook_get_page_posts",
+      "description": "Scrape posts from a public Facebook Page feed"
+    },
+    {
+      "name": "analyze_voice_of_customer",
+      "description": "Mine discussions into pains, desires, objections, and quotes"
+    },
+    {
+      "name": "build_customer_persona",
+      "description": "Build a Schwartz 'Breakthrough Advertising' customer persona brief"
+    },
+    {
+      "name": "test_facebook_connection",
+      "description": "Check Facebook session, engine, and Playwright availability"
     }
   ],
-  "keywords": ["reddit", "social-media", "api", "mcp", "write", "post", "comment", "search", "analysis"],
+  "keywords": [
+    "reddit",
+    "facebook",
+    "facebook-groups",
+    "social-media",
+    "api",
+    "mcp",
+    "write",
+    "post",
+    "comment",
+    "search",
+    "customer-persona",
+    "e-commerce",
+    "market-research",
+    "scraping"
+  ],
   "license": "MIT",
   "user_config": {
     "reddit_client_id": {
@@ -143,6 +194,34 @@
       "type": "string",
       "title": "Bot Footer",
       "description": "Custom bot footer text (used with bot disclosure = auto)",
+      "required": false,
+      "sensitive": false
+    },
+    "facebook_cookie": {
+      "type": "string",
+      "title": "Facebook Cookie",
+      "description": "Full Cookie header from a logged-in facebook.com browser (must include c_user and xs). Required to scrape private groups you belong to.",
+      "required": false,
+      "sensitive": true
+    },
+    "facebook_engine": {
+      "type": "string",
+      "title": "Facebook Engine",
+      "description": "Scraping engine: auto (default), http (lightweight), or browser (Playwright; best for private groups)",
+      "required": false,
+      "sensitive": false
+    },
+    "facebook_min_delay_ms": {
+      "type": "string",
+      "title": "Facebook Request Delay (ms)",
+      "description": "Minimum delay between Facebook requests for anti-bot pacing (default 4000)",
+      "required": false,
+      "sensitive": false
+    },
+    "facebook_headless": {
+      "type": "string",
+      "title": "Facebook Headless Browser",
+      "description": "Run the Playwright browser engine headless: true (default) or false",
       "required": false,
       "sensitive": false
     }

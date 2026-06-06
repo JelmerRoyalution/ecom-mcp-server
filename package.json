@@ -1,7 +1,7 @@
 {
   "name": "reddit-mcp-server",
-  "version": "1.4.8",
-  "description": "A Model Context Protocol (MCP) server for Reddit with full read AND write operations - create posts, reply, edit, and delete content.",
+  "version": "1.5.0",
+  "description": "An e-commerce customer-research MCP server: scrape discussions from Reddit AND Facebook groups (public & private), plus full Reddit read/write, and build Schwartz 'Breakthrough Advertising' customer personas.",
   "type": "module",
   "main": "dist/index.js",
   "module": "./dist/index.js",
@@ -41,12 +41,16 @@
     "start": "pnpm build && npx reddit-mcp-server",
     "serve": "pnpm build && node dist/index.js",
     "serve:dev": "tsx watch src/index.ts",
-    "build:mcpb": "./scripts/build-mcpb.sh"
+    "build:mcpb": "./scripts/build-mcpb.sh",
+    "setup": "tsx scripts/setup.ts",
+    "setup:facebook": "tsx scripts/setup.ts"
   },
   "prettier": "ts-builds/prettier",
   "keywords": [
     "mcp",
     "reddit",
+    "facebook",
+    "facebook-groups",
     "api",
     "model-context-protocol",
     "claude",
@@ -55,7 +59,13 @@
     "fastmcp",
     "write",
     "post",
-    "comment"
+    "comment",
+    "customer-persona",
+    "e-commerce",
+    "market-research",
+    "voice-of-customer",
+    "breakthrough-advertising",
+    "scraping"
   ],
   "mcpName": "io.github.jordanburke/reddit-mcp-server",
   "author": "Jordan Burke <jordan.burke@gmail.com>",
@@ -69,9 +79,11 @@
   },
   "homepage": "https://github.com/jordanburke/reddit-mcp-server#readme",
   "dependencies": {
+    "cheerio": "^1.2.0",
     "dotenv": "^17.4.2",
     "fastmcp": "^4.0.1",
     "functype": "^1.0.1",
+    "playwright": "^1.60.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

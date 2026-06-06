@@ -1,348 +1,296 @@
-# Reddit MCP Server
+<div align="center">
 
-A Model Context Protocol (MCP) server for interacting with Reddit - fetch posts, comments, user info, and **create content**.
+# 🛒 Ecom Customer Research MCP
 
-[![npm version](https://img.shields.io/npm/v/reddit-mcp-server.svg)](https://www.npmjs.com/package/reddit-mcp-server)
-[![npm downloads](https://img.shields.io/npm/dm/reddit-mcp-server.svg)](https://www.npmjs.com/package/reddit-mcp-server)
-[![GitHub stars](https://img.shields.io/github/stars/jordanburke/reddit-mcp-server.svg?style=flat&logo=github)](https://github.com/jordanburke/reddit-mcp-server/stargazers)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+### Turn real conversations from **Reddit** & **Facebook groups** into **customer personas** — automatically.
 
-<a href="https://glama.ai/mcp/servers/@jordanburke/reddit-mcp-server">
-  <img width="380" height="200" src="https://glama.ai/mcp/servers/@jordanburke/reddit-mcp-server/badge" alt="reddit-mcp-server MCP server" />
-</a>
+_Listen to your market in their own words. Understand what they really want. Sell with copy that converts._
 
-## Features at a Glance
+<br/>
 
-| Feature                         | reddit-mcp-server  | Other Reddit MCPs  |
-| ------------------------------- | :----------------: | :----------------: |
-| **Create Posts**                | :white_check_mark: |        :x:         |
-| **Reply to Posts/Comments**     | :white_check_mark: |        :x:         |
-| **Edit Posts/Comments**         | :white_check_mark: |        :x:         |
-| **Delete Posts/Comments**       | :white_check_mark: |        :x:         |
-| **Spam Protection (Safe Mode)** | :white_check_mark: |        :x:         |
-| **Bot Disclosure Footer**       | :white_check_mark: |        :x:         |
-| **Policy Compliance Built-in**  | :white_check_mark: |        :x:         |
-| Browse Subreddits               | :white_check_mark: | :white_check_mark: |
-| Search Reddit                   | :white_check_mark: | :white_check_mark: |
-| User Analysis                   | :white_check_mark: | :white_check_mark: |
-| Post Comments                   | :white_check_mark: | :white_check_mark: |
-| Zero-Setup Anonymous Mode       | :white_check_mark: | :white_check_mark: |
-| Three-Tier Auth (10/60/100 rpm) | :white_check_mark: | :white_check_mark: |
+![Built for E-commerce](https://img.shields.io/badge/Built%20for-E--commerce-ff69b4?style=for-the-badge)
+![Works with Claude](https://img.shields.io/badge/Works%20with-Claude-D97757?style=for-the-badge&logo=anthropic&logoColor=white)
+![MCP](https://img.shields.io/badge/Model%20Context%20Protocol-000000?style=for-the-badge)
 
-## Quick Start
+![Reddit](https://img.shields.io/badge/Reddit-FF4500?logo=reddit&logoColor=white)
+![Facebook](https://img.shields.io/badge/Facebook%20Groups-1877F2?logo=facebook&logoColor=white)
+![Chrome](https://img.shields.io/badge/Chrome-4285F4?logo=googlechrome&logoColor=white)
+![Brave](https://img.shields.io/badge/Brave-FB542B?logo=brave&logoColor=white)
+![Edge](https://img.shields.io/badge/Edge-0078D7?logo=microsoftedge&logoColor=white)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
-### Option 1: Claude Desktop Extension (Easiest)
+</div>
 
-Download and open the extension file - Claude Desktop will install it automatically:
-
-**[Download reddit-mcp-server.mcpb](https://github.com/jordanburke/reddit-mcp-server/releases/latest/download/reddit-mcp-server.mcpb)**
-
-### Option 2: NPX (No install required)
-
-```bash
-npx reddit-mcp-server
-```
-
-Or add to your MCP config (Claude Desktop, Cursor, etc.):
-
-```json
-{
-  "mcpServers": {
-    "reddit": {
-      "command": "npx",
-      "args": ["reddit-mcp-server"]
-    }
-  }
-}
-```
-
-### Option 3: Claude Code
-
-```bash
-claude mcp add --transport stdio reddit -- npx reddit-mcp-server
-```
-
-## Features
-
-### Read-only Tools
-
-| Tool                      | Description                                                                 |
-| ------------------------- | --------------------------------------------------------------------------- |
-| `get_reddit_post`         | Get a specific Reddit post with engagement analysis                         |
-| `get_top_posts`           | Get top posts from a subreddit or home feed                                 |
-| `browse_subreddit`        | Browse a subreddit/home feed by sort (hot, new, top, rising, controversial) |
-| `get_user_info`           | Get detailed information about a Reddit user                                |
-| `get_user_posts`          | Get posts submitted by a specific user                                      |
-| `get_user_comments`       | Get comments made by a specific user                                        |
-| `get_subreddit_info`      | Get subreddit details and statistics                                        |
-| `get_trending_subreddits` | Get currently trending subreddits                                           |
-| `get_post_comments`       | Get comments from a specific post with threading                            |
-| `search_reddit`           | Search for posts across Reddit                                              |
-
-### Write Tools (Require User Credentials)
-
-| Tool             | Description                                 |
-| ---------------- | ------------------------------------------- |
-| `create_post`    | Create a new post in a subreddit            |
-| `reply_to_post`  | Post a reply to an existing post or comment |
-| `edit_post`      | Edit your own Reddit post (self-text only)  |
-| `edit_comment`   | Edit your own Reddit comment                |
-| `delete_post`    | Permanently delete your own post            |
-| `delete_comment` | Permanently delete your own comment         |
-
-## Configuration
-
-### Environment Variables
-
-| Variable                | Required | Default        | Description                                               |
-| ----------------------- | -------- | -------------- | --------------------------------------------------------- |
-| `REDDIT_CLIENT_ID`      | No\*     | -              | Reddit app client ID                                      |
-| `REDDIT_CLIENT_SECRET`  | No\*     | -              | Reddit app client secret                                  |
-| `REDDIT_USERNAME`       | No       | -              | Reddit username (for write operations)                    |
-| `REDDIT_PASSWORD`       | No       | -              | Reddit password (for write operations)                    |
-| `REDDIT_USER_AGENT`     | No       | Auto-generated | Custom User-Agent string                                  |
-| `REDDIT_AUTH_MODE`      | No       | `auto`         | Authentication mode: `auto`, `authenticated`, `anonymous` |
-| `REDDIT_SAFE_MODE`      | No       | `standard`     | Write safeguards: `off`, `standard`, `strict`             |
-| `REDDIT_BOT_DISCLOSURE` | No       | `off`          | Bot disclosure footer: `auto`, `off`                      |
-| `REDDIT_BOT_FOOTER`     | No       | Built-in       | Custom bot footer text (when disclosure is `auto`)        |
-| `REDDIT_CACHE`          | No       | `on`           | In-memory caching of read requests: `on`, `off`           |
-| `REDDIT_CACHE_MAX_MB`   | No       | `50`           | Cache size cap in MB (LRU eviction beyond this)           |
-
-\*Required only if using `authenticated` mode.
-
-### Full MCP Config Example
-
-```json
-{
-  "mcpServers": {
-    "reddit": {
-      "command": "npx",
-      "args": ["reddit-mcp-server"],
-      "env": {
-        "REDDIT_CLIENT_ID": "your_client_id",
-        "REDDIT_CLIENT_SECRET": "your_client_secret",
-        "REDDIT_USERNAME": "your_username",
-        "REDDIT_PASSWORD": "your_password",
-        "REDDIT_SAFE_MODE": "standard"
-      }
-    }
-  }
-}
-```
-
-## Safe Mode (Spam Protection)
-
-Protect your Reddit account from spam detection and bans with built-in safeguards. **Enabled by default** (`standard` mode) per Reddit's Responsible Builder Policy.
-
-### Why Use Safe Mode?
-
-Reddit's spam detection can flag accounts for:
-
-- Rapid posting or commenting
-- Duplicate or similar content
-- Posting the same content across multiple subreddits
-- Non-standard User-Agent strings
-
-Safe Mode helps prevent these issues automatically.
-
-### Mode Options
-
-| Mode       | Write Delay | Duplicate Detection       | Use Case                       |
-| ---------- | ----------- | ------------------------- | ------------------------------ |
-| `off`      | None        | No                        | Explicit opt-out only          |
-| `standard` | 2 seconds   | Last 10 items + cross-sub | **Default**, recommended       |
-| `strict`   | 5 seconds   | Last 20 items + cross-sub | For cautious automated posting |
-
-### Disable Safe Mode
-
-Safe mode is enabled by default. To explicitly disable:
-
-```bash
-export REDDIT_SAFE_MODE=off
-npx reddit-mcp-server
-```
-
-### What Safe Mode Does
-
-1. **Rate Limiting**: Enforces minimum delays between write operations
-2. **Duplicate Detection**: Blocks identical content from being posted twice
-3. **Cross-Subreddit Detection**: Prevents posting the same content to multiple subreddits (per Reddit policy)
-4. **Smart User-Agent**: Auto-generates Reddit-compliant User-Agent format when username is provided
-
-## Bot Disclosure
-
-Reddit's Responsible Builder Policy requires bots to disclose their automated nature. Enable automatic bot footers on all posted content:
-
-```bash
-export REDDIT_BOT_DISCLOSURE=auto
-npx reddit-mcp-server
-```
-
-When enabled, a footer is appended to all posts, replies, and edits:
-
-```
 ---
-🤖 I am a bot | Built with reddit-mcp-server
+
+> [!TIP]
+> **Not technical? That's fine.** You don't need to write code. Skip to **[🚀 Quick Start](#-quick-start-no-coding-needed)** — open the folder in Claude, say _"set up the Facebook scraper"_, and start researching.
+
+## 💡 Why this exists
+
+Great e-commerce copy isn't invented — it's **overheard**. Your future customers are already describing their pains, desires, and objections in Reddit threads and Facebook groups, in their own words.
+
+This tool reads those conversations for you and organizes them into a **customer persona** using Eugene Schwartz's legendary _Breakthrough Advertising_ framework — so you know exactly **what to say, to whom, and when**.
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+### 👂 Listen
+
+Scrape discussions from **Reddit** and **public _and_ private Facebook groups** you're a member of.
+
+</td>
+<td width="33%" valign="top">
+
+### 🧠 Understand
+
+Auto-mine **voice of customer**: pains, desires, objections, questions, emotional triggers, and verbatim quotes.
+
+</td>
+<td width="33%" valign="top">
+
+### 🎯 Sell
+
+Get a **Schwartz persona**: mass desire, awareness stage, sophistication level + ready-to-use headline angles.
+
+</td>
+</tr>
+</table>
+
+## 🧭 How it works
+
+```mermaid
+flowchart LR
+    L["🔐 Your browser login<br/>(Chrome / Brave / Edge / Arc…)"] -->|"pnpm run setup"| ENV[(".env<br/>local & private")]
+    ENV --> S{{"🛒 Ecom Research<br/>MCP Server"}}
+    R["👽 Reddit<br/>subreddits & comments"] --> S
+    F["📘 Facebook<br/>public & private groups"] --> S
+    S --> V["🗣️ Voice of Customer<br/>pains · desires · objections · quotes"]
+    V --> P["📋 Customer Persona<br/>Schwartz Breakthrough Advertising"]
+    P --> C["✍️ Copy, ads & offers<br/>that actually resonate"]
 ```
 
-Customize the footer with `REDDIT_BOT_FOOTER`:
+## 🚀 Quick Start (No Coding Needed)
+
+**You need:** a browser (Chrome, Brave, Edge, Arc…), a Facebook account that's a member of the groups you want to research, and [Claude Code](https://claude.com/claude-code).
+
+|     | Step         | What to do                                                                                                                                               |
+| --- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1️⃣  | **Open**     | Open this folder in **Claude Code**.                                                                                                                     |
+| 2️⃣  | **Log in**   | Make sure you're **logged into Facebook** in your normal browser.                                                                                        |
+| 3️⃣  | **Set up**   | Tell Claude: _**"Set up the Facebook scraper."**_ It runs `pnpm install` + `pnpm run setup` and grabs your login automatically — **no cookies to copy**. |
+| 4️⃣  | **Research** | Ask away (see prompts below). 🎉                                                                                                                         |
+
+> [!IMPORTANT]
+> On a Mac you may see a **one-time** _"Chrome Safe Storage"_ keychain prompt during setup — click **Always Allow**. Your login is saved **only** to a local, git-ignored `.env` file. It's never uploaded or committed.
+
+<details>
+<summary><b>⌨️ Prefer the command line?</b></summary>
 
 ```bash
-export REDDIT_BOT_DISCLOSURE=auto
-export REDDIT_BOT_FOOTER=$'\n\n---\n^(🤖 Custom bot footer text)'
+pnpm install
+pnpm run setup                # auto-detects your browser & grabs your Facebook login
+# pick a browser:             pnpm run setup brave
+# pick a specific profile:    pnpm run setup chrome "Profile 1"
 ```
 
-## Authentication Modes
+Supported browsers: **Chrome, Brave, Edge, Arc, Chromium, Vivaldi, Opera**. Re-run `pnpm run setup` anytime you log in again.
 
-### Mode Comparison
+</details>
 
-| Mode             | Rate Limit     | Setup Required | Best For                 |
-| ---------------- | -------------- | -------------- | ------------------------ |
-| `anonymous`      | ~10 req/min    | None           | Quick testing, read-only |
-| `auto` (default) | 10-100 req/min | Optional       | Flexible usage           |
-| `authenticated`  | 60-100 req/min | Required       | Production use           |
+## 💬 Talk to it — example prompts
 
-### Anonymous Mode (Zero Setup)
+Once it's set up, just chat with Claude:
+
+```text
+"Scrape this Facebook group and build me a customer persona:
+ https://www.facebook.com/groups/XXXXXXXXX  — my product is a natural sleep supplement."
+```
+
+```text
+"Find Facebook groups about 'natural skincare', scrape the top discussions,
+ and tell me the 5 biggest pains and the exact words people use."
+```
+
+```text
+"Pull the hottest threads from r/SkincareAddiction and r/30PlusSkinCare,
+ then combine them with my Facebook group data into one persona."
+```
+
+```text
+"From everything you scraped, write 3 ad headlines in the Schwartz style
+ that channel their #1 mass desire."
+```
+
+## 🛠️ What's inside
+
+### 📘 Facebook tools
+
+| Tool                         | What it does                                                |
+| ---------------------------- | ----------------------------------------------------------- |
+| `facebook_get_group_posts`   | Scrape recent posts from a **public or private** group feed |
+| `facebook_get_post_comments` | Scrape the full **comment thread** of a post                |
+| `facebook_get_group_info`    | Group name, privacy, member count, description              |
+| `facebook_search_groups`     | Find groups by niche/keyword                                |
+| `facebook_get_page_posts`    | Scrape a public **Page** feed (e.g. a competitor)           |
+| `test_facebook_connection`   | Check your login / engine status                            |
+
+### 🎯 Customer-persona tools (Schwartz _Breakthrough Advertising_)
+
+| Tool                        | What it does                                                                                                                  |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `analyze_voice_of_customer` | Mine any text into **pains, desires, objections, questions, triggers, quotes**                                                |
+| `build_customer_persona`    | Build a full persona brief: **mass desire**, the **5 awareness stages**, the **5 sophistication levels**, and headline angles |
+
+> 💡 These work on **Reddit, Facebook, or both** — feed them whatever you scraped.
+
+<details>
+<summary><b>👽 Reddit tools (read &amp; write)</b></summary>
+
+**Read:** `get_reddit_post` · `get_top_posts` · `browse_subreddit` · `search_reddit` · `get_post_comments` · `get_user_info` · `get_user_posts` · `get_user_comments` · `get_subreddit_info` · `get_trending_subreddits`
+
+**Write (needs Reddit login):** `create_post` · `reply_to_post` · `edit_post` · `edit_comment` · `delete_post` · `delete_comment`
+
+Reddit works **with zero setup** in anonymous mode, or add credentials for higher rate limits and posting. See [Advanced configuration](#-advanced-configuration).
+
+</details>
+
+## 🧠 The framework: why "personas," done right
+
+Eugene Schwartz's first rule of advertising:
+
+> _"You cannot create desire — you can only channel the desires that already exist in the mind of the prospect."_
+
+So instead of guessing, this tool **extracts** the desire that's already there and maps your market on two axes Schwartz made famous:
+
+- **5 States of Awareness** — from _Unaware_ → _Problem-Aware_ → _Solution-Aware_ → _Product-Aware_ → _Most-Aware_. Tells you **where to start the conversation**.
+- **5 Stages of Sophistication** — how many claims your market has already heard. Tells you **how to position your claim/mechanism** so it still lands.
+
+The output is an evidence-backed brief Claude turns into your persona — quoting your customers verbatim, never inventing.
+
+---
+
+## ⚙️ Advanced configuration
+
+<details>
+<summary><b>🔑 Facebook session options</b></summary>
+
+The easiest path is `pnpm run setup`. Under the hood it fills these in `.env`:
+
+| Variable                                   | Description                                                                                                                  |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `FACEBOOK_COOKIE`                          | Full cookie header for your logged-in session (set automatically by setup). Required for private groups.                     |
+| `FACEBOOK_COOKIE_FROM`                     | Auto-read cookies from a browser **on every start**: `chrome` · `brave` · `edge` · `arc` · `chromium` · `vivaldi` · `opera`. |
+| `FACEBOOK_COOKIE_FROM_PROFILE`             | Browser profile name (default `Default`).                                                                                    |
+| `FACEBOOK_ENGINE`                          | `auto` (default) · `http` (lightweight) · `browser` (Playwright — best for private groups).                                  |
+| `FACEBOOK_HEADLESS`                        | Run the browser engine hidden (default `true`).                                                                              |
+| `FACEBOOK_MIN_DELAY_MS`                    | Delay between requests to stay friendly to Facebook (default `4000`).                                                        |
+| `FACEBOOK_CACHE` / `FACEBOOK_CACHE_MAX_MB` | In-memory response cache (default `on` / `50`).                                                                              |
+
+**How cookie auto-pickup works:** the tool reads your browser's local cookie database and lets the browser (or your OS keychain) decrypt it — so you never copy-paste secrets. Cross-platform (macOS Keychain / Windows DPAPI / Linux).
+
+</details>
+
+<details>
+<summary><b>👽 Reddit configuration (auth tiers, safe mode, bot disclosure)</b></summary>
+
+| Variable                                    | Default     | Description                                    |
+| ------------------------------------------- | ----------- | ---------------------------------------------- |
+| `REDDIT_AUTH_MODE`                          | `auto`      | `auto` · `authenticated` · `anonymous`         |
+| `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` | –           | Reddit app creds (higher rate limits)          |
+| `REDDIT_USERNAME` / `REDDIT_PASSWORD`       | –           | For posting/commenting                         |
+| `REDDIT_SAFE_MODE`                          | `standard`  | Spam protection: `off` · `standard` · `strict` |
+| `REDDIT_BOT_DISCLOSURE`                     | `off`       | Append a bot footer to posts: `auto` · `off`   |
+| `REDDIT_CACHE` / `REDDIT_CACHE_MAX_MB`      | `on` / `50` | Read-response caching                          |
+
+| Mode             | Rate limit     | Setup    | Best for      |
+| ---------------- | -------------- | -------- | ------------- |
+| `anonymous`      | ~10 req/min    | none     | quick testing |
+| `auto` (default) | 10–100 req/min | optional | flexible      |
+| `authenticated`  | 60–100 req/min | required | production    |
+
+</details>
+
+<details>
+<summary><b>🧰 Manual MCP config &amp; HTTP / Docker</b></summary>
+
+The repo ships a ready-to-use `.mcp.json` (Claude Code auto-loads it). To register manually elsewhere:
 
 ```json
 {
-  "env": {
-    "REDDIT_AUTH_MODE": "anonymous"
+  "mcpServers": {
+    "ecom-research": {
+      "command": "node",
+      "args": ["./dist/index.js"],
+      "env": { "FACEBOOK_ENGINE": "browser" }
+    }
   }
 }
 ```
 
-### Authenticated Mode (Higher Rate Limits)
-
-1. Create a Reddit app at https://www.reddit.com/prefs/apps (select "script" type)
-2. Copy the client ID and secret
-3. Configure:
-
-```json
-{
-  "env": {
-    "REDDIT_AUTH_MODE": "authenticated",
-    "REDDIT_CLIENT_ID": "your_client_id",
-    "REDDIT_CLIENT_SECRET": "your_client_secret"
-  }
-}
-```
-
-### Write Operations
-
-To create posts, reply, edit, or delete content, you need user credentials:
-
-```json
-{
-  "env": {
-    "REDDIT_USERNAME": "your_username",
-    "REDDIT_PASSWORD": "your_password",
-    "REDDIT_SAFE_MODE": "standard"
-  }
-}
-```
-
-## Development
-
-### Commands
-
-```bash
-pnpm install        # Install dependencies
-pnpm build          # Build TypeScript
-pnpm dev            # Build and run MCP inspector
-pnpm test           # Run tests
-pnpm lint           # Lint code
-pnpm format         # Format code
-```
-
-### CLI Options
-
-```bash
-npx reddit-mcp-server --version         # Show version
-npx reddit-mcp-server --help            # Show help
-npx reddit-mcp-server --generate-token  # Generate OAuth token for HTTP mode
-```
-
-## HTTP Server Mode
-
-For Docker deployments or web-based clients, use HTTP transport:
+**HTTP server mode** (Docker / web clients):
 
 ```bash
 TRANSPORT_TYPE=httpStream PORT=3000 node dist/index.js
+# optional OAuth: OAUTH_ENABLED=true OAUTH_TOKEN=...
 ```
 
-### With OAuth Protection
+</details>
+
+<details>
+<summary><b>🩺 Troubleshooting</b></summary>
+
+| Problem                       | Fix                                                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| _"No Facebook login found"_   | Log into Facebook in that browser first, then re-run `pnpm run setup`. Try another browser: `pnpm run setup brave`. |
+| Setup can't read cookies      | Make sure the browser is installed and you're logged in. On macOS, allow the keychain prompt.                       |
+| Private group returns nothing | Your account must be a **member** of the group. Use `FACEBOOK_ENGINE=browser`.                                      |
+| Facebook shows a checkpoint   | Slow down (raise `FACEBOOK_MIN_DELAY_MS`) and re-run `pnpm run setup` to refresh your session.                      |
+| `pnpm setup` does nothing     | Use `pnpm run setup` — bare `pnpm setup` is a reserved pnpm command.                                                |
+
+</details>
+
+## 🔒 Privacy & responsible use
+
+> [!WARNING]
+> This tool is for **aggregate customer research** — understanding a market, not individuals.
+
+- Only access groups you're **legitimately a member of**.
+- Don't de-anonymize people or republish their posts verbatim as your own.
+- Scraping may conflict with a platform's Terms of Service — use responsibly and at your own discretion.
+- Reddit data must not be used for AI training or resale (per Reddit's Responsible Builder Policy).
+
+## 🧑‍💻 For developers
+
+<details>
+<summary><b>Stack &amp; commands</b></summary>
+
+TypeScript · [FastMCP](https://github.com/punkpeye/fastmcp) · Playwright (Facebook browser engine) · Cheerio (HTML parsing) · functype · Zod · Vitest.
 
 ```bash
-export OAUTH_ENABLED=true
-export OAUTH_TOKEN=$(npx reddit-mcp-server --generate-token | tail -1)
-TRANSPORT_TYPE=httpStream node dist/index.js
+pnpm install        # install deps
+pnpm run setup      # connect your Facebook login
+pnpm build          # build
+pnpm test           # run tests
+pnpm validate       # format + lint + typecheck + test + build
+pnpm serve:dev      # run from source (tsx)
 ```
 
-Make authenticated requests:
+**Architecture:** `src/facebook/` (client, engines, parsers, cookie-extractor, formatters) · `src/persona/schwartz.ts` (voice-of-customer mining + framework) · `src/client/` (Reddit) · `src/index.ts` (MCP tools). See `CLAUDE.md` for the full map.
 
-```bash
-curl -H "Authorization: Bearer $OAUTH_TOKEN" \
-     -H "Content-Type: application/json" \
-     -d '{"method":"tools/list","params":{}}' \
-     http://localhost:3000/mcp
-```
+</details>
 
-## Docker
+## 🙏 Credits
 
-### Quick Start
+Built on top of [reddit-mcp-server](https://github.com/jordanburke/reddit-mcp-server) by Jordan Burke. Facebook group scraping, the multi-browser cookie auto-setup, and the Schwartz persona engine are additions in this fork.
 
-```bash
-# Pull and run
-docker pull ghcr.io/jordanburke/reddit-mcp-server:latest
+Persona methodology: _Breakthrough Advertising_ by Eugene M. Schwartz.
 
-docker run -d \
-  --name reddit-mcp \
-  -p 3000:3000 \
-  -e REDDIT_CLIENT_ID=your_client_id \
-  -e REDDIT_CLIENT_SECRET=your_client_secret \
-  -e REDDIT_SAFE_MODE=standard \
-  ghcr.io/jordanburke/reddit-mcp-server:latest
-```
+<div align="center">
 
-### Docker Compose
+---
 
-```yaml
-services:
-  reddit-mcp:
-    image: ghcr.io/jordanburke/reddit-mcp-server:latest
-    ports:
-      - "3000:3000"
-    environment:
-      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID}
-      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET}
-      - REDDIT_USERNAME=${REDDIT_USERNAME}
-      - REDDIT_PASSWORD=${REDDIT_PASSWORD}
-      - REDDIT_SAFE_MODE=standard
-      - OAUTH_ENABLED=${OAUTH_ENABLED:-false}
-      - OAUTH_TOKEN=${OAUTH_TOKEN}
-    restart: unless-stopped
-```
+**Made for e-commerce operators who'd rather listen than guess.** 🛒
 
-### Build Locally
-
-```bash
-docker build -t reddit-mcp-server .
-docker run -d --name reddit-mcp -p 3000:3000 --env-file .env reddit-mcp-server
-```
-
-## Reddit Responsible Builder Policy
-
-This server is designed with [Reddit's Responsible Builder Policy](https://support.reddithelp.com/hc/en-us/articles/42728983564564-Responsible-Builder-Policy) in mind:
-
-- **Safe mode on by default** — rate limiting and duplicate detection prevent spam
-- **Cross-subreddit duplicate detection** — blocks identical content across subreddits
-- **Bot disclosure support** — optional automated footer for transparency
-- **No voting/karma manipulation** — upvote/downvote tools are intentionally excluded
-- **No private messaging** — DM tools are intentionally excluded
-- **Policy-aware AI instructions** — MCP server instructions remind AI assistants of data usage restrictions
-
-## Credits
-
-- Fork of [reddit-mcp-server](https://github.com/alexandros-lekkas/reddit-mcp-server) by Alexandros Lekkas
-- Inspired by [Python Reddit MCP Server](https://github.com/Arindam200/reddit-mcp) by Arindam200
+</div>

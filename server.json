@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.jordanburke/reddit-mcp-server",
-  "description": "Reddit MCP server with full read/write - posts, comments, search, and content creation.",
+  "description": "E-commerce research MCP: scrape Reddit + Facebook groups (public & private), full Reddit read/write, and build Schwartz customer personas.",
   "repository": {
     "url": "https://github.com/jordanburke/reddit-mcp-server",
     "source": "github"
   },
-  "version": "1.4.8",
+  "version": "1.5.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "reddit-mcp-server",
-      "version": "1.4.8",
+      "version": "1.5.0",
       "transport": {
         "type": "stdio"
       },
@@ -68,6 +68,34 @@
         {
           "name": "REDDIT_BOT_FOOTER",
           "description": "Custom bot footer text (used with REDDIT_BOT_DISCLOSURE=auto)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "FACEBOOK_COOKIE",
+          "description": "Full Cookie header from a logged-in facebook.com browser (must include c_user and xs). Required to scrape private groups you are a member of.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "FACEBOOK_ENGINE",
+          "description": "Facebook scraping engine: auto (default), http (lightweight), or browser (Playwright; best for private groups)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "FACEBOOK_MIN_DELAY_MS",
+          "description": "Minimum delay in ms between Facebook requests (anti-bot pacing, default 4000)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "FACEBOOK_HEADLESS",
+          "description": "Run the Playwright browser engine headless: true (default) or false",
           "isRequired": false,
           "format": "string",
           "isSecret": false
