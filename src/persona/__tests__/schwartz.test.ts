@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest"
 
 import {
   buildPersonaBrief,
+  classifyComment,
   inferAwarenessDistribution,
   inferSophistication,
+  isValuableComment,
   mineVoiceOfCustomer,
   splitSentences,
 } from "../schwartz"
@@ -94,6 +96,34 @@ describe("schwartz persona engine", () => {
     it("handles an empty corpus without throwing", () => {
       const brief = buildPersonaBrief({ texts: [] })
       expect(brief).toContain("# Customer Persona Brief")
+    })
+  })
+
+  describe("isValuableComment", () => {
+    it("keeps substantive comments", () => {
+      expect(isValuableComment("I tried three moisturizers and none of them stopped the dryness.")).toBe(true)
+    })
+
+    it("drops short low-signal reactions", () => {
+      expect(isValuableComment("Following")).toBe(false)
+      expect(isValuableComment("thanks so much")).toBe(false)
+      expect(isValuableComment("same here")).toBe(false)
+      expect(isValuableComment("👏👏👏")).toBe(false)
+      expect(isValuableComment("@Jane Doe")).toBe(false)
+    })
+
+    it("respects the minimum word count", () => {
+      expect(isValuableComment("dry skin is annoying", 6)).toBe(false)
+    })
+  })
+
+  describe("classifyComment", () => {
+    it("tags by dominant voice-of-customer cue", () => {
+      expect(classifyComment("I already tried CeraVe and it was a total waste of money")).toBe("objection")
+      expect(classifyComment("My skin is so dry and flaky, I hate it")).toBe("pain")
+      expect(classifyComment("I really want to find a serum that actually works")).toBe("desire")
+      expect(classifyComment("Where can you buy this brand?")).toBe("question")
+      expect(classifyComment("The weather is nice today")).toBe("other")
     })
   })
 })

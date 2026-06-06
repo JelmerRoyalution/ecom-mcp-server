@@ -51,6 +51,7 @@ Platform-agnostic - feed them text scraped from Reddit, Facebook, or both.
 
 - `analyze_voice_of_customer` - Mine a corpus into pains, desires, objections, questions, emotional triggers, product mentions, recurring phrases, and verbatim quotes
 - `build_customer_persona` - Produce a persona brief organized by **mass desire**, the **5 awareness stages**, and the **5 market-sophistication levels**, with synthesis instructions for the LLM. Accepts raw `texts` and/or a `facebook_group` to auto-scrape.
+- `export_comments_csv` - Deep-scrape comments from Facebook groups and/or subreddits and write a **CSV** (one row per comment: `platform, source_url, post_url, post_excerpt, author, category, comment`). Low-value reactions are filtered via `isValuableComment` (not capped by count); each comment is tagged via `classifyComment` (pain/desire/objection/question/other). Facebook deep scraping uses `FacebookClient.getGroupComments` (feed → open each post → pull its thread). CSV serialization lives in `src/utils/csv.ts`. Output files match `voice-of-customer-*.csv` and are git-ignored (may contain personal data).
 
 ### Server Modes
 

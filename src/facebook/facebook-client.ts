@@ -175,12 +175,51 @@ export class FacebookClient {
         () => "",
         (id) => id,
       )
-      const scrolls = Math.max(4, Math.ceil(limit / 8))
+      // Cap scrolling so a high comment limit can't explode into hundreds of scrolls per post.
+      const scrolls = Math.min(10, Math.max(3, Math.ceil(limit / 12)))
       const html = await this.fetchHtml(url, { scrolls })
       const { post, comments } = parsePostWithComments(html, groupId !== "" ? { groupId } : {})
       return Right({ post, comments: comments.slice(0, limit) })
     } catch (error) {
       return Left(new Error(`Failed to read post comments: ${toError(error).message}`))
+    }
+  }
+
+  /**
+   * Deep-scrape a group's discussions: read the feed, then open each post and pull its
+   * comment thread. There is no per-comment cap - callers filter by value instead.
+   */
+  async getGroupComments(
+    groupRef: string,
+    opts: { readonly postLimit?: number; readonly commentLimit?: number } = {},
+  ): Promise<Either<Error, { readonly groupUrl: string; readonly threads: readonly FacebookPostWithComments[] }>> {
+    try {
+      const groupId = extractGroupId(groupRef)
+      if (groupId === "") {
+        return Left(new Error("A group id, slug, or URL is required."))
+      }
+      const postLimit = opts.postLimit ?? 30
+      const commentLimit = opts.commentLimit ?? 120
+      const posts = (await this.getGroupFeed(groupRef, postLimit)).orThrow()
+
+      const threads: FacebookPostWithComments[] = []
+      for (const post of posts) {
+        if (post.permalink === undefined || post.permalink === "") {
+          continue
+        }
+        const result = await this.getPostComments(post.permalink, commentLimit)
+        result.fold(
+          () => undefined,
+          (data) => {
+            // Keep the feed post (richer permalink + text) for context, with the parsed comments.
+            threads.push({ post, comments: data.comments })
+          },
+        )
+      }
+
+      return Right({ groupUrl: `${WWW}/groups/${groupId}`, threads })
+    } catch (error) {
+      return Left(new Error(`Failed to read group comments: ${toError(error).message}`))
     }
   }
 

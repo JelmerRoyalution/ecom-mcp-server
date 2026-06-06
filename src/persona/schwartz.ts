@@ -582,3 +582,108 @@ Using ONLY the evidence above, write a customer persona with these sections:
 
 Do not invent demographics or facts not supported by the evidence; label inferences as assumptions.`
 }
+
+// Low-signal reactions that add no research value (kept out of CSV exports).
+const LOW_VALUE_COMMENTS = new Set([
+  "thanks",
+  "thank you",
+  "thank you so much",
+  "following",
+  "follow",
+  "bump",
+  "this",
+  "same",
+  "same here",
+  "interested",
+  "commenting",
+  "comment",
+  "saving",
+  "saved",
+  "here",
+  "me too",
+  "ditto",
+  "agreed",
+  "agree",
+  "exactly",
+  "yep",
+  "yeah",
+  "yes",
+  "no",
+  "lol",
+  "haha",
+  "wow",
+  "nice",
+  "cute",
+  "congrats",
+  "congratulations",
+  "amen",
+  "praying",
+  "sending love",
+  "love this",
+  "dm",
+  "dm me",
+  "pm me",
+  "sending hugs",
+  "hugs",
+  "so sweet",
+  "beautiful",
+  "gorgeous",
+  "good luck",
+  "ok",
+  "okay",
+  "yup",
+  "facts",
+  "real",
+  "true",
+  "love it",
+  "great",
+])
+
+/**
+ * Decide whether a comment carries enough signal to be worth keeping for research.
+ * Filters out short reactions, emoji/mention-only replies, and generic "following" noise.
+ */
+export function isValuableComment(text: string, minWords = 4): boolean {
+  const clean = text.trim()
+  if (clean.length < 15) {
+    return false
+  }
+  const normalized = clean
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+  if (LOW_VALUE_COMMENTS.has(normalized)) {
+    return false
+  }
+  const words = normalized.split(/\s+/).filter((w) => w.length > 0)
+  if (words.length < minWords) {
+    return false
+  }
+  // Mostly emoji / links / mentions (too few real letters) → low value.
+  const letters = (clean.match(/[a-zA-Z]/g) ?? []).length
+  if (letters < 12) {
+    return false
+  }
+  return true
+}
+
+export type CommentCategory = "pain" | "desire" | "objection" | "question" | "other"
+
+/** Tag a comment with its dominant voice-of-customer category. */
+export function classifyComment(text: string): CommentCategory {
+  const lower = text.toLowerCase()
+  if (containsAny(lower, OBJECTION_CUES)) {
+    return "objection"
+  }
+  if (containsAny(lower, PAIN_CUES)) {
+    return "pain"
+  }
+  if (containsAny(lower, DESIRE_CUES)) {
+    return "desire"
+  }
+  if (text.trim().endsWith("?")) {
+    return "question"
+  }
+  return "other"
+}

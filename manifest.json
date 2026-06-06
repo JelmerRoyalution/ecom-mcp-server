@@ -126,6 +126,10 @@
       "description": "Build a Schwartz 'Breakthrough Advertising' customer persona brief"
     },
     {
+      "name": "export_comments_csv",
+      "description": "Scrape comments from Facebook groups/subreddits to a CSV (one row per comment)"
+    },
+    {
       "name": "test_facebook_connection",
       "description": "Check Facebook session, engine, and Playwright availability"
     }

@@ -1,3 +1,6 @@
+import { writeFileSync } from "node:fs"
+import { isAbsolute, join } from "node:path"
+
 import crypto from "crypto"
 import dotenv from "dotenv"
 import { FastMCP } from "fastmcp"
@@ -11,8 +14,9 @@ import { isPlaywrightAvailable } from "./facebook/engines"
 import { getFacebookClient, initializeFacebookClient } from "./facebook/facebook-client"
 import { formatFeed, formatGroupInfo, formatGroupSearch, formatPostComments } from "./facebook/format"
 import type { FacebookEngine, FacebookSession } from "./facebook/types"
-import { buildPersonaBrief, mineVoiceOfCustomer } from "./persona/schwartz"
+import { buildPersonaBrief, classifyComment, isValuableComment, mineVoiceOfCustomer } from "./persona/schwartz"
 import type { BotDisclosureConfig, CacheConfig, RedditAuthMode, RedditSafeMode, SafeModeConfig } from "./types"
+import { toCsv } from "./utils/csv"
 import { formatPostInfo, formatSubredditInfo, formatUserInfo } from "./utils/formatters"
 
 // A current desktop Chrome UA - used for Facebook fetches when none is provided.
@@ -1418,6 +1422,165 @@ server.addTool({
     })
   },
 })
+
+/* eslint-disable functype/no-imperative-loops, functype/prefer-map -- this tool fans out over
+   sources/posts/comments and accumulates CSV rows; nested loops are the clearest expression. */
+server.addTool({
+  name: "export_comments_csv",
+  description:
+    "Scrape comments from Facebook groups and/or Reddit subreddits and save them to a CSV file - one row " +
+    "per comment, with columns: platform (reddit/facebook), source_url, post_url, post_excerpt, author, " +
+    "category (pain/desire/objection/question/other), and the comment text. Low-value reactions (like " +
+    "'following' or 'thanks') are filtered out by default. Great for building a voice-of-customer dataset.",
+  parameters: z.object({
+    facebook_groups: z
+      .array(z.string())
+      .default([])
+      .describe("Facebook group ids, slugs, or URLs to scrape comments from (must be a member of private ones)"),
+    subreddits: z.array(z.string()).default([]).describe("Subreddit names to scrape comments from (without the r/)"),
+    posts_per_source: z.number().min(1).max(200).default(30).describe("How many recent posts to open per source"),
+    min_words: z.number().min(1).max(50).default(4).describe("Minimum words for a comment to count as valuable"),
+    include_low_value: z.boolean().default(false).describe("Keep low-signal reactions too (default: filter them out)"),
+    reddit_time: z
+      .enum(["hour", "day", "week", "month", "year", "all"])
+      .default("month")
+      .describe("Time window for Reddit top posts"),
+    output_path: z
+      .string()
+      .optional()
+      .describe("Where to save the CSV (default: ./voice-of-customer-<timestamp>.csv in the project folder)"),
+  }),
+  execute: async (args) => {
+    if (args.facebook_groups.length === 0 && args.subreddits.length === 0) {
+      // eslint-disable-next-line functype/prefer-either
+      throw new Error("Provide at least one entry in facebook_groups or subreddits.")
+    }
+
+    const columns = ["platform", "source_url", "post_url", "post_excerpt", "author", "category", "comment"]
+    const rows: Record<string, string>[] = []
+    const errors: string[] = []
+    const oneLine = (s: string) => s.replace(/\s+/g, " ").trim()
+    const excerpt = (s: string) => oneLine(s).slice(0, 160)
+
+    // Facebook: feed -> open each post -> pull its comment thread.
+    if (args.facebook_groups.length > 0) {
+      const fb = unwrapFacebookClient()
+      for (const group of args.facebook_groups) {
+        const result = await fb.getGroupComments(group, { postLimit: args.posts_per_source })
+        result.fold(
+          (err) => {
+            errors.push(`Facebook "${group}": ${err.message}`)
+          },
+          (data) => {
+            for (const thread of data.threads) {
+              for (const c of thread.comments) {
+                rows.push({
+                  platform: "facebook",
+                  source_url: data.groupUrl,
+                  post_url: thread.post.permalink ?? data.groupUrl,
+                  post_excerpt: excerpt(thread.post.text),
+                  author: c.author,
+                  category: classifyComment(c.text),
+                  comment: oneLine(c.text),
+                })
+              }
+            }
+          },
+        )
+      }
+    }
+
+    // Reddit: top posts -> each post's comments.
+    if (args.subreddits.length > 0) {
+      const reddit = unwrapClient()
+      for (const sub of args.subreddits) {
+        const cleanSub = sub.replace(/^r\//i, "")
+        const postsResult = await reddit.getTopPosts(cleanSub, args.reddit_time, args.posts_per_source)
+        const posts = postsResult.fold(
+          (err) => {
+            errors.push(`Reddit r/${cleanSub}: ${err.message}`)
+            return []
+          },
+          (p) => p,
+        )
+        for (const post of posts) {
+          const commentsResult = await reddit.getPostComments(post.id, cleanSub, { limit: 200 })
+          commentsResult.fold(
+            () => undefined,
+            ({ comments }) => {
+              for (const c of comments) {
+                rows.push({
+                  platform: "reddit",
+                  source_url: `https://reddit.com/r/${cleanSub}`,
+                  post_url: `https://reddit.com${post.permalink}`,
+                  post_excerpt: excerpt(post.title),
+                  author: c.author,
+                  category: classifyComment(c.body),
+                  comment: oneLine(c.body),
+                })
+              }
+            },
+          )
+        }
+      }
+    }
+
+    const kept = args.include_low_value ? rows : rows.filter((r) => isValuableComment(r.comment, args.min_words))
+
+    // Drop exact-duplicate comments (same platform + text).
+    const seen = new Set<string>()
+    const deduped = kept.filter((r) => {
+      const key = `${r.platform}|${r.comment.toLowerCase()}`
+      if (seen.has(key)) {
+        return false
+      }
+      seen.add(key)
+      return true
+    })
+
+    if (deduped.length === 0) {
+      const detail = errors.length > 0 ? `\n\nIssues:\n- ${errors.join("\n- ")}` : ""
+      // eslint-disable-next-line functype/prefer-either
+      throw new Error(
+        `No comments were scraped. Make sure you're logged in and a member of any private groups.${detail}`,
+      )
+    }
+
+    const stamp = new Date().toISOString().replace(/:/g, "-").replace(/\..+$/, "").replace("T", "_")
+    const fileName = `voice-of-customer-${stamp}.csv`
+    const target =
+      args.output_path !== undefined && args.output_path.trim() !== ""
+        ? isAbsolute(args.output_path)
+          ? args.output_path
+          : join(process.cwd(), args.output_path)
+        : join(process.cwd(), fileName)
+
+    writeFileSync(target, toCsv(columns, deduped), "utf8")
+
+    const fbCount = deduped.filter((r) => r.platform === "facebook").length
+    const redditCount = deduped.filter((r) => r.platform === "reddit").length
+    const cats = ["pain", "desire", "objection", "question", "other"]
+      .map((cat) => `${cat}=${deduped.filter((r) => r.category === cat).length}`)
+      .join(", ")
+    const preview = deduped
+      .slice(0, 5)
+      .map((r) => `- [${r.platform} · ${r.category}] ${r.comment.slice(0, 110)}`)
+      .join("\n")
+
+    return `# Voice-of-Customer CSV exported ✅
+
+Saved **${deduped.length}** comments to:
+\`${target}\`
+
+- Platform: facebook=${fbCount}, reddit=${redditCount}
+- Category: ${cats}
+- Columns: ${columns.join(", ")}
+${errors.length > 0 ? `\n⚠️ Some sources had issues:\n- ${errors.join("\n- ")}\n` : ""}
+### Preview (first 5 rows)
+${preview}`
+  },
+})
+/* eslint-enable functype/no-imperative-loops, functype/prefer-map */
 
 // Initialize and start server
 async function main() {

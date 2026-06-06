@@ -142,6 +142,11 @@ Just chat with Claude in normal language. **Reddit works instantly; Facebook use
  that channel their #1 mass desire."
 ```
 
+```text
+"Scrape the comments from this Facebook group and from r/SkincareAddiction,
+ and export them all to a CSV: https://www.facebook.com/groups/XXXXXXXXX"
+```
+
 ## 🧭 How it works
 
 ```mermaid
@@ -200,12 +205,13 @@ Three toolsets your Claude can use:
 
 ### 🎯 Customer-persona tools (Schwartz _Breakthrough Advertising_) · _Reddit, Facebook, or both_
 
-| Tool                        | What it does                                                                                                                  |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `analyze_voice_of_customer` | Mine any text into **pains, desires, objections, questions, triggers, quotes**                                                |
-| `build_customer_persona`    | Build a full persona brief: **mass desire**, the **5 awareness stages**, the **5 sophistication levels**, and headline angles |
+| Tool                        | What it does                                                                                                                                                                      |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `analyze_voice_of_customer` | Mine any text into **pains, desires, objections, questions, triggers, quotes**                                                                                                    |
+| `build_customer_persona`    | Build a full persona brief: **mass desire**, the **5 awareness stages**, the **5 sophistication levels**, and headline angles                                                     |
+| `export_comments_csv`       | Scrape comments from Facebook groups and/or subreddits to a **CSV** - one row per comment (platform, source, post link, author, category, text), low-value reactions filtered out |
 
-> 💡 Mix sources freely - combine Reddit threads and Facebook group discussions into one persona.
+> 💡 Mix sources freely - combine Reddit threads and Facebook group discussions into one persona or one CSV.
 
 ## 🧠 The framework: why "personas," done right
 

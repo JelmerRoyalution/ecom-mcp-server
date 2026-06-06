@@ -16,3 +16,8 @@ coverage/
 # Built extension
 *.mcpb
 bundle-temp/
+
+# Scraped voice-of-customer exports (may contain personal data - never commit)
+voice-of-customer-*.csv
+voc-*.csv
+exports/
