@@ -1,6 +1,6 @@
 /* eslint-disable functype/no-let, functype/no-imperative-loops, functype/prefer-functype-map, functype/prefer-fold --
  * This module is a deterministic text-mining primitive. It scans a corpus of customer
- * discussion against cue lexicons and accumulates matches into buckets — an inherently
+ * discussion against cue lexicons and accumulates matches into buckets - an inherently
  * imperative pass over tokens and sentences. Expressing the scanners as immutable folds
  * would obscure intent without changing behavior. The LLM does the synthesis; this module
  * only extracts and organizes raw evidence.
@@ -450,34 +450,34 @@ export function inferSophistication(texts: readonly string[], voc: VoiceOfCustom
     return {
       level: 5,
       rationale:
-        "Heavy skepticism and 'tried everything / nothing works' language. The market is jaded; claims and mechanisms are exhausted — lead with identification, the prospect's identity and lived experience, not new claims.",
+        "Heavy skepticism and 'tried everything / nothing works' language. The market is jaded; claims and mechanisms are exhausted - lead with identification, the prospect's identity and lived experience, not new claims.",
     }
   }
   if (jaded === 1 || comparative >= 3) {
     return {
       level: 4,
       rationale:
-        "Strong comparison-shopping and some disbelief. Mechanisms are well-worn — elaborate and amplify your unique mechanism, make it more credible/concrete than competitors.",
+        "Strong comparison-shopping and some disbelief. Mechanisms are well-worn - elaborate and amplify your unique mechanism, make it more credible/concrete than competitors.",
     }
   }
   if (comparative >= 1 || voc.objections.length >= 3) {
     return {
       level: 3,
       rationale:
-        "The market has heard the core claims and is starting to compare. Introduce a NEW mechanism — explain *how* your product delivers the result differently.",
+        "The market has heard the core claims and is starting to compare. Introduce a NEW mechanism - explain *how* your product delivers the result differently.",
     }
   }
   if (voc.desires.length >= 5) {
     return {
       level: 2,
       rationale:
-        "Desire is clearly expressed and a few claims circulate. Enlarge/extend the winning claim — make the promise bigger and more specific than what's currently said.",
+        "Desire is clearly expressed and a few claims circulate. Enlarge/extend the winning claim - make the promise bigger and more specific than what's currently said.",
     }
   }
   return {
     level: 1,
     rationale:
-      "Little competing-claim or skepticism language detected. The market may be fresh for this promise — state the claim directly and simply; be first to name the desire.",
+      "Little competing-claim or skepticism language detected. The market may be fresh for this promise - state the claim directly and simply; be first to name the desire.",
   }
 }
 
@@ -491,7 +491,7 @@ const STAGE_GUIDANCE: Record<AwarenessStage, string> = {
   "product-aware":
     "Prospect knows your product but isn't convinced. Lead with proof, differentiation, risk-reversal, specifics vs alternatives.",
   "most-aware":
-    "Prospect knows and wants it — just needs the deal/terms. Lead with the offer, urgency, and a direct CTA.",
+    "Prospect knows and wants it - just needs the deal/terms. Lead with the offer, urgency, and a direct CTA.",
 }
 
 export type PersonaBriefInput = {
@@ -517,16 +517,16 @@ export function buildPersonaBrief(input: PersonaBriefInput): string {
 
   const weightLines = (Object.entries(awareness.weights) as [AwarenessStage, number][])
     .sort((a, b) => b[1] - a[1])
-    .map(([stage, w]) => `- **${stage}** — ${w}%${stage === awareness.dominant ? "  ← dominant" : ""}`)
+    .map(([stage, w]) => `- **${stage}** - ${w}%${stage === awareness.dominant ? "  ← dominant" : ""}`)
     .join("\n")
 
-  return `# Customer Persona Brief — Schwartz "Breakthrough Advertising"
+  return `# Customer Persona Brief - Schwartz "Breakthrough Advertising"
 
 ${input.productContext !== undefined ? `**Product / niche context:** ${input.productContext}\n` : ""}**Source:** ${input.sourceLabel ?? "supplied discussion corpus"}
 **Corpus size:** ${texts.length} item(s), ${totalChars.toLocaleString()} characters
 
 > This brief is auto-extracted evidence. Eugene Schwartz's first principle: *"You cannot create
-> desire — you can only channel the desires that already exist in the mind of the prospect."*
+> desire - you can only channel the desires that already exist in the mind of the prospect."*
 > Synthesize the persona from the verbatim evidence below. Quote real language; flag anything
 > you infer beyond the evidence as an assumption.
 
@@ -550,7 +550,7 @@ ${list(voc.emotionalTriggers)}
 ## 6. Products / Solutions They Mention
 ${list(voc.productMentions)}
 
-## 7. Voice of Customer — Verbatim Quotes (mirror this language)
+## 7. Voice of Customer - Verbatim Quotes (mirror this language)
 ${list(voc.quotes)}
 
 ## 8. The Words They Use (recurring phrases)
@@ -561,7 +561,7 @@ ${list(voc.vocabulary)}
 ## 9. State of Awareness (heuristic)
 ${weightLines}
 
-**Dominant entry point — ${awareness.dominant}:** ${STAGE_GUIDANCE[awareness.dominant]}
+**Dominant entry point - ${awareness.dominant}:** ${STAGE_GUIDANCE[awareness.dominant]}
 
 ## 10. Market Sophistication (heuristic): Level ${sophistication.level} / 5
 ${sophistication.rationale}
@@ -570,15 +570,15 @@ ${sophistication.rationale}
 
 ## Your task (synthesis)
 Using ONLY the evidence above, write a customer persona with these sections:
-1. **Identity snapshot** — who they are, in their own words.
-2. **Dominant mass desire** — the single deepest want to channel.
-3. **Core pains** — ranked, quoting verbatim.
-4. **Dream outcome** — the transformation they crave.
-5. **Beliefs & objections** — what they must overcome to buy.
-6. **Awareness stage & messaging entry point** — where to start the conversation (use §9).
-7. **Sophistication level & claim strategy** — how to position the claim/mechanism (use §10).
-8. **Voice & vocabulary to mirror** — exact phrases to use in copy.
-9. **Big Idea & 3 headline angles** — channel the desire into Schwartz-style headlines.
+1. **Identity snapshot** - who they are, in their own words.
+2. **Dominant mass desire** - the single deepest want to channel.
+3. **Core pains** - ranked, quoting verbatim.
+4. **Dream outcome** - the transformation they crave.
+5. **Beliefs & objections** - what they must overcome to buy.
+6. **Awareness stage & messaging entry point** - where to start the conversation (use §9).
+7. **Sophistication level & claim strategy** - how to position the claim/mechanism (use §10).
+8. **Voice & vocabulary to mirror** - exact phrases to use in copy.
+9. **Big Idea & 3 headline angles** - channel the desire into Schwartz-style headlines.
 
 Do not invent demographics or facts not supported by the evidence; label inferences as assumptions.`
 }

@@ -445,7 +445,7 @@ describe("RedditClient", () => {
         ok: true,
         json: async () => ({ access_token: "test-token", expires_in: 3600 }),
       })
-      // first (and only) data fetch — must expose text() for caching
+      // first (and only) data fetch - must expose text() for caching
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,

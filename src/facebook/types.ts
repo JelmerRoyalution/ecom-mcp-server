@@ -3,13 +3,13 @@ import type { CacheConfig } from "../types"
 /**
  * Facebook scraping engine selection.
  *
- * - `http`    — lightweight `fetch` against the mobile site (mbasic/m.facebook.com).
+ * - `http`    - lightweight `fetch` against the mobile site (mbasic/m.facebook.com).
  *               Fast and dependency-free, but Facebook increasingly server-renders
  *               via JS, so this is best-effort (works most reliably for public Pages).
- * - `browser` — Playwright-driven Chromium with the user's logged-in session. The only
+ * - `browser` - Playwright-driven Chromium with the user's logged-in session. The only
  *               reliable path for PRIVATE groups and full comment threads in 2025+.
  *               Requires the optional `playwright` peer dependency + a browser binary.
- * - `auto`    — prefer `browser` when Playwright is available and a session is set,
+ * - `auto`    - prefer `browser` when Playwright is available and a session is set,
  *               otherwise fall back to `http`.
  */
 export type FacebookEngine = "auto" | "http" | "browser"
@@ -29,7 +29,7 @@ export type FacebookSession = {
   readonly cUser: string
   /** Session secret (the `xs` cookie). */
   readonly xs: string
-  /** Optional device identifier (the `datr` cookie) — lowers checkpoint risk. */
+  /** Optional device identifier (the `datr` cookie) - lowers checkpoint risk. */
   readonly datr?: string
 }
 

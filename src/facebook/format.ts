@@ -47,7 +47,7 @@ ${body}`
 /** Render a post and its comment thread as Markdown. */
 export function formatPostComments(result: FacebookPostWithComments): string {
   const { post, comments } = result
-  const header = `# Facebook Discussion — post by ${post.author}
+  const header = `# Facebook Discussion - post by ${post.author}
 
 ${truncate(post.text, 600)}
 

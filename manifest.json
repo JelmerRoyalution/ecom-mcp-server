@@ -3,7 +3,7 @@
   "name": "reddit-mcp-server",
   "display_name": "Reddit + Facebook Customer Research MCP",
   "version": "1.5.0",
-  "description": "Scrape Reddit and Facebook groups (public & private) and build Schwartz 'Breakthrough Advertising' customer personas — directly from Claude.",
+  "description": "Scrape Reddit and Facebook groups (public & private) and build Schwartz 'Breakthrough Advertising' customer personas - directly from Claude.",
   "long_description": "An e-commerce customer-research MCP server. It scrapes real customer discussions from Reddit AND Facebook groups, then turns them into customer personas using Eugene Schwartz's 'Breakthrough Advertising' framework.\n\n**Reddit (read + write):**\n- Browse/search any subreddit, fetch posts with threaded comments\n- User profiles, trending subreddits\n- Create, reply, edit, delete (with credentials) + Safe Mode spam protection\n\n**Facebook (scraping):**\n- Scrape posts from PUBLIC and PRIVATE Facebook groups (private groups need a logged-in session cookie from a member)\n- Scrape comment threads from posts\n- Group metadata, group search, public Page feeds\n- Lightweight HTTP engine by default; optional Playwright browser engine for private groups and full comment threads\n\n**Customer personas (Schwartz framework):**\n- Mine discussions into voice-of-customer buckets: pains, desires, objections, questions, emotional triggers, verbatim quotes\n- Build a persona brief organized by mass desire, the 5 awareness stages, and the 5 market-sophistication levels\n- Works on Reddit, Facebook, or both\n\n**Perfect for:**\n- E-commerce brands and DTC marketers\n- Customer/audience research and ad copywriting\n- Market and competitor analysis",
   "author": {
     "name": "Jordan Burke",

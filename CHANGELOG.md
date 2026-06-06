@@ -4,12 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [1.5.0] - 2026-06-06
 
-### Added — Facebook group scraping + customer personas
+### Added - Facebook group scraping + customer personas
 
 - **Facebook tools**: `facebook_get_group_posts`, `facebook_get_post_comments`, `facebook_get_group_info`, `facebook_search_groups`, `facebook_get_page_posts`, `test_facebook_connection`. Scrapes public **and** private Facebook groups (private groups via a member's `FACEBOOK_COOKIE` session).
-- **Two scraping engines** behind a common interface: a lightweight `fetch`-based HTTP engine (default) and an optional Playwright **browser engine** (`FACEBOOK_ENGINE=browser`) — the reliable path for private groups and full comment threads. Playwright is an optional, lazy-loaded peer (not a hard dependency).
-- **One-command onboarding** (`pnpm run setup`) + automatic multi-browser cookie pickup (`src/facebook/cookie-extractor.ts`): grabs your Facebook login straight from a logged-in Chrome/Brave/Edge/Arc/Chromium/Vivaldi/Opera profile — no manual cookie copy‑paste. Direct decryption on macOS/Linux (cookie SQLite + OS keychain key + AES) with a Playwright fallback for Windows. Also exposed at runtime via `FACEBOOK_COOKIE_FROM`. `playwright` is now a direct dependency (browser engine is core).
-- **Customer persona tools** implementing Eugene Schwartz's _Breakthrough Advertising_ framework: `analyze_voice_of_customer` (mines pains/desires/objections/questions/quotes) and `build_customer_persona` (organizes evidence by mass desire, the 5 awareness stages, and 5 market-sophistication levels). Platform-agnostic — works on Reddit and/or Facebook text.
+- **Two scraping engines** behind a common interface: a lightweight `fetch`-based HTTP engine (default) and an optional Playwright **browser engine** (`FACEBOOK_ENGINE=browser`) - the reliable path for private groups and full comment threads. Playwright is an optional, lazy-loaded peer (not a hard dependency).
+- **One-command onboarding** (`pnpm run setup`) + automatic multi-browser cookie pickup (`src/facebook/cookie-extractor.ts`): grabs your Facebook login straight from a logged-in Chrome/Brave/Edge/Arc/Chromium/Vivaldi/Opera profile - no manual cookie copy‑paste. Direct decryption on macOS/Linux (cookie SQLite + OS keychain key + AES) with a Playwright fallback for Windows. Also exposed at runtime via `FACEBOOK_COOKIE_FROM`. `playwright` is now a direct dependency (browser engine is core).
+- **Customer persona tools** implementing Eugene Schwartz's _Breakthrough Advertising_ framework: `analyze_voice_of_customer` (mines pains/desires/objections/questions/quotes) and `build_customer_persona` (organizes evidence by mass desire, the 5 awareness stages, and 5 market-sophistication levels). Platform-agnostic - works on Reddit and/or Facebook text.
 - New `src/facebook/*` module (client, engines, parsers, cookies, formatters, types) and `src/persona/schwartz.ts`, with unit tests for cookie parsing, HTML parsing, and the persona engine.
 - Config: `FACEBOOK_COOKIE` (or `FACEBOOK_C_USER`/`FACEBOOK_XS`/`FACEBOOK_DATR`), `FACEBOOK_ENGINE`, `FACEBOOK_HEADLESS`, `FACEBOOK_MIN_DELAY_MS`, `FACEBOOK_LOCALE`, `FACEBOOK_USER_AGENT`, `FACEBOOK_CACHE`, `FACEBOOK_CACHE_MAX_MB`.
 

@@ -73,7 +73,7 @@ export class HttpFetchEngine implements FacebookFetchEngine {
   }
 
   async close(): Promise<void> {
-    // Stateless — nothing to release.
+    // Stateless - nothing to release.
   }
 }
 
@@ -206,7 +206,7 @@ async function clickAll(page: any, selectors: readonly string[]): Promise<void> 
         await page.waitForTimeout(400)
       }
     } catch {
-      // Selector not present on this page — ignore.
+      // Selector not present on this page - ignore.
     }
   }
 }

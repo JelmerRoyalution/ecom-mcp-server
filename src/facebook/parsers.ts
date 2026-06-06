@@ -113,7 +113,7 @@ export function absoluteUrl(href: string | undefined): string | undefined {
 }
 
 function looksLikeProfileLink(href: string): boolean {
-  // Group member links look like /groups/{id}/user/{uid}/ — treat those as profiles.
+  // Group member links look like /groups/{id}/user/{uid}/ - treat those as profiles.
   if (/\/user\/\d+/.test(href)) {
     return true
   }

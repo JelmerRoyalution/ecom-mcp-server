@@ -2,7 +2,7 @@
  * External-IO boundary: reads the user's logged-in browser profile to recover their
  * Facebook session. Two strategies:
  *   1. Direct decryption (macOS/Linux): read the cookie SQLite DB + the OS keychain key
- *      + AES-128-CBC — deterministic, works while the browser is open.
+ *      + AES-128-CBC - deterministic, works while the browser is open.
  *   2. Playwright fallback (any OS, incl. Windows DPAPI/App-Bound): let the real browser
  *      binary decrypt its own cookies.
  * Inherently imperative effects; the caller wraps results at its boundary.
@@ -202,7 +202,7 @@ function decryptValue(buf: Buffer, key: Buffer, hostKey: string): string {
   if (pad > 0 && pad <= 16 && pad <= out.length) {
     out = out.subarray(0, out.length - pad)
   }
-  // Newer Chrome prepends a 32-byte SHA-256(host_key) hash before the value — strip it.
+  // Newer Chrome prepends a 32-byte SHA-256(host_key) hash before the value - strip it.
   if (out.length >= 32) {
     const hostHash = crypto.createHash("sha256").update(hostKey).digest()
     if (out.subarray(0, 32).equals(hostHash)) {

@@ -15,7 +15,7 @@ import { buildPersonaBrief, mineVoiceOfCustomer } from "./persona/schwartz"
 import type { BotDisclosureConfig, CacheConfig, RedditAuthMode, RedditSafeMode, SafeModeConfig } from "./types"
 import { formatPostInfo, formatSubredditInfo, formatUserInfo } from "./utils/formatters"
 
-// A current desktop Chrome UA — used for Facebook fetches when none is provided.
+// A current desktop Chrome UA - used for Facebook fetches when none is provided.
 const DEFAULT_FACEBOOK_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
@@ -53,7 +53,7 @@ function buildUserAgent(customAgent?: string, username?: string): string {
 
   const fallbackAgent = `typescript:reddit-mcp-server:${VERSION} (by /u/anonymous)`
   console.error(
-    "[Setup] No REDDIT_USERNAME set — using anonymous User-Agent. Set REDDIT_USERNAME for a personalized agent.",
+    "[Setup] No REDDIT_USERNAME set - using anonymous User-Agent. Set REDDIT_USERNAME for a personalized agent.",
   )
   return fallbackAgent
 }
@@ -94,12 +94,12 @@ function unwrapClient() {
 
 function unwrapFacebookClient() {
   return getFacebookClient().orThrow(
-    new Error("Facebook client not initialized — restart the server with Facebook support enabled."),
+    new Error("Facebook client not initialized - restart the server with Facebook support enabled."),
   )
 }
 
-// Build a Facebook session from env: explicit cookie, discrete parts, or — when
-// FACEBOOK_COOKIE_FROM is set — auto-extracted from a locally logged-in browser.
+// Build a Facebook session from env: explicit cookie, discrete parts, or - when
+// FACEBOOK_COOKIE_FROM is set - auto-extracted from a locally logged-in browser.
 async function resolveFacebookSession(): Promise<FacebookSession | undefined> {
   const cookie = process.env.FACEBOOK_COOKIE
   if (cookie !== undefined && cookie.trim() !== "") {
@@ -175,21 +175,21 @@ async function setupFacebookClient(): Promise<void> {
   console.error("[Setup] Facebook client initialized")
   console.error(`[Setup] Facebook engine: ${engine}`)
   if (session !== undefined) {
-    console.error(`[Setup] ✓ Facebook session loaded (c_user=${session.cUser}) — private groups accessible if joined`)
+    console.error(`[Setup] ✓ Facebook session loaded (c_user=${session.cUser}) - private groups accessible if joined`)
   } else {
-    console.error("[Setup] Facebook: no session cookies — only limited public reads will work")
+    console.error("[Setup] Facebook: no session cookies - only limited public reads will work")
     console.error("[Setup] Set FACEBOOK_COOKIE (full cookie header) to scrape groups you are a member of")
   }
 
   if (engine === "browser" || engine === "auto") {
     const hasPlaywright = await isPlaywrightAvailable()
     if (hasPlaywright) {
-      console.error("[Setup] ✓ Playwright detected — browser engine available (best for private groups)")
+      console.error("[Setup] ✓ Playwright detected - browser engine available (best for private groups)")
     } else if (engine === "browser") {
       console.error("[Setup] ✗ FACEBOOK_ENGINE=browser but Playwright is not installed")
       console.error("[Setup]   Install with: npm install playwright && npx playwright install chromium")
     } else {
-      console.error("[Setup] Playwright not installed — Facebook will use the lightweight HTTP engine")
+      console.error("[Setup] Playwright not installed - Facebook will use the lightweight HTTP engine")
       console.error(
         "[Setup]   For private groups & full comments: npm install playwright && npx playwright install chromium",
       )
@@ -300,7 +300,7 @@ async function setupRedditClient() {
     console.error(`[Setup]   - Duplicate detection: enabled (tracking last ${safeModeConfig.maxRecentHashes} items)`)
   } else {
     console.error(
-      "[Setup] Safe mode: off (explicitly disabled — ensure compliance with Reddit's Responsible Builder Policy)",
+      "[Setup] Safe mode: off (explicitly disabled - ensure compliance with Reddit's Responsible Builder Policy)",
     )
   }
 
@@ -346,12 +346,12 @@ Customer-persona workflow (Schwartz "Breakthrough Advertising"):
 - analyze_voice_of_customer: mine a corpus of comments/posts into pains, desires, objections, questions,
   emotional triggers, product mentions, and verbatim quotes
 - build_customer_persona: assemble a persona brief organized by mass desire, the 5 awareness stages, and
-  the 5 market-sophistication levels — then synthesize the persona from that evidence
+  the 5 market-sophistication levels - then synthesize the persona from that evidence
 - These persona tools are platform-agnostic: feed them text scraped from Reddit, Facebook, or both.
 
 For Reddit write operations (posting, replying, editing, deleting), ensure REDDIT_USERNAME and REDDIT_PASSWORD are configured.
 
-IMPORTANT — research data ethics:
+IMPORTANT - research data ethics:
 - Scraped discussion is for aggregate customer-persona research only. Do NOT de-anonymize, profile, or
   re-identify individuals, and do NOT republish people's verbatim posts/comments as-is.
 - Respect Facebook's and Reddit's Terms; only access private groups you are legitimately a member of.
@@ -1379,7 +1379,7 @@ server.addTool({
     facebook_group: z
       .string()
       .optional()
-      .describe("Optional Facebook group id/slug/URL — its feed posts are scraped and added to the corpus"),
+      .describe("Optional Facebook group id/slug/URL - its feed posts are scraped and added to the corpus"),
     facebook_post_limit: z.number().min(1).max(100).default(30).describe("Posts to scrape when facebook_group is set"),
     product_context: z.string().optional().describe("Optional product/niche context to frame the persona"),
   }),

@@ -47,7 +47,7 @@ Scrape public and private Facebook groups/pages for customer-discussion research
 
 ### Customer Persona Tools (Schwartz "Breakthrough Advertising")
 
-Platform-agnostic — feed them text scraped from Reddit, Facebook, or both.
+Platform-agnostic - feed them text scraped from Reddit, Facebook, or both.
 
 - `analyze_voice_of_customer` - Mine a corpus into pains, desires, objections, questions, emotional triggers, product mentions, recurring phrases, and verbatim quotes
 - `build_customer_persona` - Produce a persona brief organized by **mass desire**, the **5 awareness stages**, and the **5 market-sophistication levels**, with synthesis instructions for the LLM. Accepts raw `texts` and/or a `facebook_group` to auto-scrape.
@@ -116,15 +116,15 @@ pnpm lint:fix
 3. **Type Definitions** (`src/types.ts`): Comprehensive TypeScript types for all Reddit entities
 
 4. **Facebook Module** (`src/facebook/`): Self-contained Facebook scraping subsystem:
-   - `facebook-client.ts`: Singleton client (mirrors the Reddit client's `Either`/`Option` pattern) — engine selection, request pacing, response caching, URL building. Methods: `getGroupFeed`, `getPostComments`, `getGroupInfo`, `getPageFeed`, `searchGroups`.
+   - `facebook-client.ts`: Singleton client (mirrors the Reddit client's `Either`/`Option` pattern) - engine selection, request pacing, response caching, URL building. Methods: `getGroupFeed`, `getPostComments`, `getGroupInfo`, `getPageFeed`, `searchGroups`.
    - `engines.ts`: Pluggable fetch engines behind `FacebookFetchEngine`. `HttpFetchEngine` (native `fetch` against `mbasic.facebook.com`) and `BrowserFetchEngine` (lazy-loads the optional `playwright` peer, drives a logged-in Chromium, scrolls + expands comments). `isPlaywrightAvailable()` gates `auto` selection.
-   - `parsers.ts`: The single source of truth that turns Facebook mobile/rendered HTML into structured posts/comments/groups via Cheerio. Tolerant, layered selectors with fallbacks. **Fully unit-tested with fixtures** — both engines feed HTML into these same parsers.
+   - `parsers.ts`: The single source of truth that turns Facebook mobile/rendered HTML into structured posts/comments/groups via Cheerio. Tolerant, layered selectors with fallbacks. **Fully unit-tested with fixtures** - both engines feed HTML into these same parsers.
    - `cookies.ts`: Parse/validate session cookies (requires `c_user` + `xs`).
-   - `cookie-extractor.ts`: **Auto-grabs the Facebook login from a locally installed, logged-in browser** (Chrome/Brave/Edge/Arc/Chromium/Vivaldi/Opera) so users never copy‑paste cookies. Two strategies: (1) **direct decryption** on macOS/Linux — reads the cookie SQLite DB (`sqlite3` CLI) + the OS keychain "Safe Storage" key (`security` on macOS) + AES‑128‑CBC, stripping the newer 32‑byte `sha256(host_key)` prefix; (2) a **Playwright fallback** that lets the real browser binary decrypt its own cookies (covers Windows DPAPI/App‑Bound). Used by `pnpm run setup` (writes `.env`) and by the runtime `FACEBOOK_COOKIE_FROM` option.
+   - `cookie-extractor.ts`: **Auto-grabs the Facebook login from a locally installed, logged-in browser** (Chrome/Brave/Edge/Arc/Chromium/Vivaldi/Opera) so users never copy‑paste cookies. Two strategies: (1) **direct decryption** on macOS/Linux - reads the cookie SQLite DB (`sqlite3` CLI) + the OS keychain "Safe Storage" key (`security` on macOS) + AES‑128‑CBC, stripping the newer 32‑byte `sha256(host_key)` prefix; (2) a **Playwright fallback** that lets the real browser binary decrypt its own cookies (covers Windows DPAPI/App‑Bound). Used by `pnpm run setup` (writes `.env`) and by the runtime `FACEBOOK_COOKIE_FROM` option.
    - `format.ts`: Markdown formatters for tool output.
    - `types.ts`: Facebook domain + config types.
 
-   **Onboarding:** `pnpm run setup` (script: `scripts/setup.ts`) detects the user's browser, extracts their Facebook session, and writes `FACEBOOK_COOKIE` + `FACEBOOK_ENGINE=browser` to `.env`. NB: `pnpm setup` (without `run`) is a reserved pnpm builtin — always use `pnpm run setup`.
+   **Onboarding:** `pnpm run setup` (script: `scripts/setup.ts`) detects the user's browser, extracts their Facebook session, and writes `FACEBOOK_COOKIE` + `FACEBOOK_ENGINE=browser` to `.env`. NB: `pnpm setup` (without `run`) is a reserved pnpm builtin - always use `pnpm run setup`.
 
 5. **Persona Module** (`src/persona/schwartz.ts`): Deterministic voice-of-customer text mining + the Schwartz "Breakthrough Advertising" structuring (awareness distribution, sophistication level, mass desire). **Extraction is deterministic here; synthesis is delegated to the calling LLM** via `buildPersonaBrief`. Platform-agnostic and fully unit-tested.
 
@@ -343,11 +343,11 @@ The project uses Vitest for testing:
 
 **CRITICAL**: Three files must stay in lockstep on every release:
 
-- `package.json` — `.version`
-- `server.json` — `.version` AND `.packages[0].version`
-- `manifest.json` — `.version`
+- `package.json` - `.version`
+- `server.json` - `.version` AND `.packages[0].version`
+- `manifest.json` - `.version`
 
-`npm version <patch|minor|major>` only bumps `package.json`. CI's `prepublishOnly` runs `pnpm check:versions` and **will fail the publish** if the other two drift (this has bitten v1.4.6 — see commit `49f232e`).
+`npm version <patch|minor|major>` only bumps `package.json`. CI's `prepublishOnly` runs `pnpm check:versions` and **will fail the publish** if the other two drift (this has bitten v1.4.6 - see commit `49f232e`).
 
 ### Correct release workflow
 
@@ -359,7 +359,7 @@ pnpm check:versions
 npm version patch --no-git-tag-version
 
 # 3. Hand-edit server.json (both version fields) and manifest.json to match
-#    Or use sed/jq — the file structure is stable
+#    Or use sed/jq - the file structure is stable
 
 # 4. Verify, validate, then commit + tag together
 pnpm check:versions
@@ -372,7 +372,7 @@ git push --follow-tags
 
 ### Or: use the `vbctp` skill, but stage the JSON files first
 
-The `vbctp` skill runs `pnpm validate` → `npm version patch` → `git push --follow-tags`. `pnpm validate` does NOT include `pnpm check:versions` — only `prepublishOnly` does, which means the mismatch is only caught in CI. **Before invoking vbctp, bump server.json + manifest.json by hand and stage them**; `npm version` will then refuse to run (dirty tree), so commit those changes first, then run vbctp.
+The `vbctp` skill runs `pnpm validate` → `npm version patch` → `git push --follow-tags`. `pnpm validate` does NOT include `pnpm check:versions` - only `prepublishOnly` does, which means the mismatch is only caught in CI. **Before invoking vbctp, bump server.json + manifest.json by hand and stage them**; `npm version` will then refuse to run (dirty tree), so commit those changes first, then run vbctp.
 
 ### Long-term fix (not yet implemented)
 

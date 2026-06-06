@@ -2,7 +2,7 @@
 
 # 🛒 Ecom Customer Research MCP
 
-### Turn real conversations from **Reddit** & **Facebook groups** into **customer personas** — automatically.
+### Turn real conversations from **Reddit** & **Facebook groups** into **customer personas** - automatically.
 
 _Listen to your market in their own words. Understand what they really want. Sell with copy that converts._
 
@@ -24,13 +24,13 @@ _Listen to your market in their own words. Understand what they really want. Sel
 ---
 
 > [!TIP]
-> **Not technical? That's fine.** You don't need to write code. Skip to **[🚀 Quick Start](#-quick-start-no-coding-needed)** — open the folder in Claude, say _"set up the Facebook scraper"_, and start researching.
+> **Not technical? That's fine.** You don't need to write code. Skip to **[🚀 Quick Start](#-quick-start-no-coding-needed)** - open the folder in Claude, say _"set up the Facebook scraper"_, and start researching.
 
 ## 💡 Why this exists
 
-Great e-commerce copy isn't invented — it's **overheard**. Your future customers are already describing their pains, desires, and objections in Reddit threads and Facebook groups, in their own words.
+Great e-commerce copy isn't invented - it's **overheard**. Your future customers are already describing their pains, desires, and objections in Reddit threads and Facebook groups, in their own words.
 
-This tool reads those conversations for you and organizes them into a **customer persona** using Eugene Schwartz's legendary _Breakthrough Advertising_ framework — so you know exactly **what to say, to whom, and when**.
+This tool reads those conversations for you and organizes them into a **customer persona** using Eugene Schwartz's legendary _Breakthrough Advertising_ framework - so you know exactly **what to say, to whom, and when**.
 
 <table>
 <tr>
@@ -73,17 +73,17 @@ flowchart LR
 
 ## 🚀 Quick Start (No Coding Needed)
 
-**You need:** a browser (Chrome, Brave, Edge, Arc…), a Facebook account that's a member of the groups you want to research, and [Claude Code](https://claude.com/claude-code).
+**You need:** a browser (Chrome, Brave, Edge, Arc…), a Facebook account that's a member of the groups you want to research, and [Claude Code](https://claude.com/claude-code) (also works with Claude Desktop and Cowork - see [Which Claude can run it?](#-which-claude-can-run-it)).
 
 |     | Step         | What to do                                                                                                                                               |
 | --- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1️⃣  | **Open**     | Open this folder in **Claude Code**.                                                                                                                     |
 | 2️⃣  | **Log in**   | Make sure you're **logged into Facebook** in your normal browser.                                                                                        |
-| 3️⃣  | **Set up**   | Tell Claude: _**"Set up the Facebook scraper."**_ It runs `pnpm install` + `pnpm run setup` and grabs your login automatically — **no cookies to copy**. |
+| 3️⃣  | **Set up**   | Tell Claude: _**"Set up the Facebook scraper."**_ It runs `pnpm install` + `pnpm run setup` and grabs your login automatically - **no cookies to copy**. |
 | 4️⃣  | **Research** | Ask away (see prompts below). 🎉                                                                                                                         |
 
 > [!IMPORTANT]
-> On a Mac you may see a **one-time** _"Chrome Safe Storage"_ keychain prompt during setup — click **Always Allow**. Your login is saved **only** to a local, git-ignored `.env` file. It's never uploaded or committed.
+> On a Mac you may see a **one-time** _"Chrome Safe Storage"_ keychain prompt during setup - click **Always Allow**. Your login is saved **only** to a local, git-ignored `.env` file. It's never uploaded or committed.
 
 <details>
 <summary><b>⌨️ Prefer the command line?</b></summary>
@@ -99,13 +99,26 @@ Supported browsers: **Chrome, Brave, Edge, Arc, Chromium, Vivaldi, Opera**. Re-r
 
 </details>
 
-## 💬 Talk to it — example prompts
+## 🤝 Which Claude can run it?
+
+It's a standard MCP server, so it plugs into any Claude that supports MCP:
+
+| Claude client                     | Works? | Notes                                                                           |
+| --------------------------------- | :----: | ------------------------------------------------------------------------------- |
+| **Claude Code**                   |   ✅   | Full experience, including the automatic browser-login pickup. **Recommended.** |
+| **Claude Desktop**                |   ✅   | Runs locally too, so the auto-login works. Add it as a local MCP server.        |
+| **Claude Cowork** / **claude.ai** |  ✅\*  | Add it as an MCP connector.                                                     |
+
+> [!NOTE]
+> \*With **Cowork / claude.ai**, MCP connectors run in Anthropic's cloud, not on your computer, so they can't read your local browser. The one-time **auto-login pickup (`pnpm run setup`) is a local feature** - run it once on your own machine (via Claude Code or Claude Desktop) to get your `FACEBOOK_COOKIE`, then paste that into the Cowork connector's settings. After that, scraping works the same everywhere.
+
+## 💬 Talk to it - example prompts
 
 Once it's set up, just chat with Claude:
 
 ```text
 "Scrape this Facebook group and build me a customer persona:
- https://www.facebook.com/groups/XXXXXXXXX  — my product is a natural sleep supplement."
+ https://www.facebook.com/groups/XXXXXXXXX  - my product is a natural sleep supplement."
 ```
 
 ```text
@@ -143,7 +156,7 @@ Once it's set up, just chat with Claude:
 | `analyze_voice_of_customer` | Mine any text into **pains, desires, objections, questions, triggers, quotes**                                                |
 | `build_customer_persona`    | Build a full persona brief: **mass desire**, the **5 awareness stages**, the **5 sophistication levels**, and headline angles |
 
-> 💡 These work on **Reddit, Facebook, or both** — feed them whatever you scraped.
+> 💡 These work on **Reddit, Facebook, or both** - feed them whatever you scraped.
 
 <details>
 <summary><b>👽 Reddit tools (read &amp; write)</b></summary>
@@ -160,14 +173,14 @@ Reddit works **with zero setup** in anonymous mode, or add credentials for highe
 
 Eugene Schwartz's first rule of advertising:
 
-> _"You cannot create desire — you can only channel the desires that already exist in the mind of the prospect."_
+> _"You cannot create desire - you can only channel the desires that already exist in the mind of the prospect."_
 
 So instead of guessing, this tool **extracts** the desire that's already there and maps your market on two axes Schwartz made famous:
 
-- **5 States of Awareness** — from _Unaware_ → _Problem-Aware_ → _Solution-Aware_ → _Product-Aware_ → _Most-Aware_. Tells you **where to start the conversation**.
-- **5 Stages of Sophistication** — how many claims your market has already heard. Tells you **how to position your claim/mechanism** so it still lands.
+- **5 States of Awareness** - from _Unaware_ → _Problem-Aware_ → _Solution-Aware_ → _Product-Aware_ → _Most-Aware_. Tells you **where to start the conversation**.
+- **5 Stages of Sophistication** - how many claims your market has already heard. Tells you **how to position your claim/mechanism** so it still lands.
 
-The output is an evidence-backed brief Claude turns into your persona — quoting your customers verbatim, never inventing.
+The output is an evidence-backed brief Claude turns into your persona - quoting your customers verbatim, never inventing.
 
 ---
 
@@ -183,12 +196,12 @@ The easiest path is `pnpm run setup`. Under the hood it fills these in `.env`:
 | `FACEBOOK_COOKIE`                          | Full cookie header for your logged-in session (set automatically by setup). Required for private groups.                     |
 | `FACEBOOK_COOKIE_FROM`                     | Auto-read cookies from a browser **on every start**: `chrome` · `brave` · `edge` · `arc` · `chromium` · `vivaldi` · `opera`. |
 | `FACEBOOK_COOKIE_FROM_PROFILE`             | Browser profile name (default `Default`).                                                                                    |
-| `FACEBOOK_ENGINE`                          | `auto` (default) · `http` (lightweight) · `browser` (Playwright — best for private groups).                                  |
+| `FACEBOOK_ENGINE`                          | `auto` (default) · `http` (lightweight) · `browser` (Playwright - best for private groups).                                  |
 | `FACEBOOK_HEADLESS`                        | Run the browser engine hidden (default `true`).                                                                              |
 | `FACEBOOK_MIN_DELAY_MS`                    | Delay between requests to stay friendly to Facebook (default `4000`).                                                        |
 | `FACEBOOK_CACHE` / `FACEBOOK_CACHE_MAX_MB` | In-memory response cache (default `on` / `50`).                                                                              |
 
-**How cookie auto-pickup works:** the tool reads your browser's local cookie database and lets the browser (or your OS keychain) decrypt it — so you never copy-paste secrets. Cross-platform (macOS Keychain / Windows DPAPI / Linux).
+**How cookie auto-pickup works:** the tool reads your browser's local cookie database and lets the browser (or your OS keychain) decrypt it - so you never copy-paste secrets. Cross-platform (macOS Keychain / Windows DPAPI / Linux).
 
 </details>
 
@@ -247,18 +260,18 @@ TRANSPORT_TYPE=httpStream PORT=3000 node dist/index.js
 | Setup can't read cookies      | Make sure the browser is installed and you're logged in. On macOS, allow the keychain prompt.                       |
 | Private group returns nothing | Your account must be a **member** of the group. Use `FACEBOOK_ENGINE=browser`.                                      |
 | Facebook shows a checkpoint   | Slow down (raise `FACEBOOK_MIN_DELAY_MS`) and re-run `pnpm run setup` to refresh your session.                      |
-| `pnpm setup` does nothing     | Use `pnpm run setup` — bare `pnpm setup` is a reserved pnpm command.                                                |
+| `pnpm setup` does nothing     | Use `pnpm run setup` - bare `pnpm setup` is a reserved pnpm command.                                                |
 
 </details>
 
 ## 🔒 Privacy & responsible use
 
 > [!WARNING]
-> This tool is for **aggregate customer research** — understanding a market, not individuals.
+> This tool is for **aggregate customer research** - understanding a market, not individuals.
 
 - Only access groups you're **legitimately a member of**.
 - Don't de-anonymize people or republish their posts verbatim as your own.
-- Scraping may conflict with a platform's Terms of Service — use responsibly and at your own discretion.
+- Scraping may conflict with a platform's Terms of Service - use responsibly and at your own discretion.
 - Reddit data must not be used for AI training or resale (per Reddit's Responsible Builder Policy).
 
 ## 🧑‍💻 For developers

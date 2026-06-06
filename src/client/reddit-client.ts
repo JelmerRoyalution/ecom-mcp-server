@@ -72,7 +72,7 @@ export class RedditClient {
   private readonly botDisclosure: BotDisclosureConfig
   private readonly cache?: ResponseCache
 
-  // Mutable state — inherent to a stateful HTTP client with token refresh
+  // Mutable state - inherent to a stateful HTTP client with token refresh
 
   private accessToken?: string
 

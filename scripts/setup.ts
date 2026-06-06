@@ -45,7 +45,7 @@ function mergeEnv(updates: Record<string, string>): void {
 
 async function main(): Promise<void> {
   log("")
-  log("🛍️  E-commerce Research MCP — Facebook setup")
+  log("🛍️  E-commerce Research MCP - Facebook setup")
   log("──────────────────────────────────────────────")
   log("This connects your Facebook login so the scraper can read groups you're in.")
   log("Make sure you're logged into Facebook in your normal browser first.")
