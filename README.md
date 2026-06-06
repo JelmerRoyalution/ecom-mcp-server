@@ -34,7 +34,7 @@ _Listen to your market in their own words. Understand what they really want. Sel
 **How it gets into Facebook:** it simply **borrows the Facebook login you already have open in your browser**. It never asks for your password.
 
 > [!TIP]
-> **Two sources - and Reddit is instant.** 👽 **Reddit needs no login and no setup at all.** In Claude you can immediately say _"Scrape r/SkincareAddiction and list the 5 biggest customer pains."_ The setup steps below are only for 📘 **Facebook**, so it can read groups with your own login.
+> **Two sources, no Reddit account needed.** 👽 `pnpm run setup` connects **Reddit** too (it borrows your browser's reddit.com cookies, which gets past Reddit's bot-block - no login or app required). Then just say _"Scrape r/SkincareAddiction and list the 5 biggest customer pains."_ The big setup below is for 📘 **Facebook**, so it can read groups with your own login.
 
 > [!IMPORTANT]
 >
@@ -103,9 +103,29 @@ Don't worry, almost every hiccup is one of these. Find your situation on the lef
 | **You used an Incognito / private window**                 | Incognito keeps no saved login                            | Use your **normal** browser window where you're logged in.                                                                                                                                             |
 | **`pnpm setup` seems to do nothing**                       | `pnpm setup` is a reserved system command                 | Use **`pnpm run setup`** (with the word "run").                                                                                                                                                        |
 | **"Is my login safe?"**                                    | Yes                                                       | Your login is saved **only** on your computer, in a hidden `.env` file. It is never uploaded, committed, or shared.                                                                                    |
-| **Reddit - do I need to log in?**                          | No                                                        | Reddit works with **no login at all**. Just ask Claude to scrape a subreddit.                                                                                                                          |
+| **Reddit - do I need an account?**                         | No                                                        | `pnpm run setup` connects Reddit by borrowing your browser's reddit.com cookies. Visit [reddit.com](https://reddit.com) once in your browser, then run setup.                                          |
+| **Reddit still says "403"**                                | Rare: your browser had no reddit.com cookies yet          | Open [reddit.com](https://reddit.com) once in your browser, then re-run `pnpm run setup`. Last resort: [connect a Reddit app](#-reddit-setup-only-if-you-get-a-403).                                   |
 
 > Still stuck? Just **tell Claude what happened in plain words** - it can read the error and walk you through the fix.
+
+---
+
+## 🔧 Reddit setup (only if you get a 403)
+
+**You almost certainly don't need this.** `pnpm run setup` already connects Reddit for you by borrowing your browser's reddit.com cookies, which gets past Reddit's bot-block - **no Reddit account or app needed**. (If you've never opened reddit.com in your browser, do that once, then run setup.)
+
+<details>
+<summary>Last resort: connect a free Reddit app (only if Reddit still 403s after setup)</summary>
+
+<br/>
+
+1. Go to **<https://www.reddit.com/prefs/apps>** → **Create another app...**
+2. Pick **"script"**, give it any name, and put `http://localhost` as the redirect URI. Click **Create app**.
+3. Copy the **client ID** (the string under the app name) and the **secret**.
+4. Add them to your `.env`: `REDDIT_CLIENT_ID=...` and `REDDIT_CLIENT_SECRET=...`
+5. Done - Reddit now uses the official OAuth API. (Facebook is unaffected.)
+
+</details>
 
 ---
 

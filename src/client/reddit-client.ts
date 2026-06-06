@@ -71,6 +71,7 @@ export class RedditClient {
   private readonly safeMode: SafeModeConfig
   private readonly botDisclosure: BotDisclosureConfig
   private readonly cache?: ResponseCache
+  private readonly cookieHeader?: string
 
   // Mutable state - inherent to a stateful HTTP client with token refresh
 
@@ -105,6 +106,7 @@ export class RedditClient {
     this.botDisclosure = config.botDisclosure ?? { enabled: false, footer: "" }
 
     this.cache = config.cache?.enabled === true ? new ResponseCache({ maxBytes: config.cache.maxBytes }) : undefined
+    this.cookieHeader = config.cookieHeader
   }
 
   private determineBaseUrl(): string {
@@ -144,6 +146,11 @@ export class RedditClient {
         ...(options.headers as Record<string, string> | undefined),
       }
 
+      // Replay reddit.com browser cookies on anonymous requests to bypass Reddit's 403 block.
+      if (!requiresAuth && this.cookieHeader !== undefined && this.cookieHeader !== "") {
+        headers["Cookie"] = this.cookieHeader
+      }
+
       if (requiresAuth && this.accessToken !== undefined) {
         headers["Authorization"] = `Bearer ${this.accessToken}`
       }
@@ -165,6 +172,17 @@ export class RedditClient {
             ...options,
             headers: retryHeaders,
           }),
+        )
+      }
+
+      // Reddit now blocks anonymous JSON access from many networks/IPs with a 403.
+      // OAuth (oauth.reddit.com) still works there, so point users at a free app.
+      if (response.status === 403 && !this.hasCredentials) {
+        throw new Error(
+          "Reddit blocked anonymous access from your network (HTTP 403). " +
+            "Reddit requires an app on many networks now. Fix: create a free 'script' app at " +
+            "https://www.reddit.com/prefs/apps (2 min), then set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET " +
+            "(see the README 'Reddit setup'). OAuth works where anonymous access is blocked.",
         )
       }
 

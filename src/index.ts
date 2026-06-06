@@ -8,7 +8,7 @@ import { Option } from "functype"
 import { z } from "zod"
 
 import { getRedditClient, initializeRedditClient } from "./client/reddit-client"
-import { type BrowserKey, extractFacebookSession } from "./facebook/cookie-extractor"
+import { type BrowserKey, extractFacebookSession, extractRedditCookieHeader } from "./facebook/cookie-extractor"
 import { buildSessionFromCookies, buildSessionFromParts } from "./facebook/cookies"
 import { isPlaywrightAvailable } from "./facebook/engines"
 import { getFacebookClient, initializeFacebookClient } from "./facebook/facebook-client"
@@ -257,6 +257,24 @@ async function setupRedditClient() {
     maxBytes: (Number.isFinite(cacheMaxMb) && cacheMaxMb > 0 ? cacheMaxMb : 50) * 1024 * 1024,
   }
 
+  // Reddit blocks anonymous JSON access from many networks (403). Replaying reddit.com cookies
+  // from the user's browser bypasses that with no Reddit account or app. Prefer an explicit
+  // REDDIT_COOKIE; otherwise auto-borrow from the browser when running anonymously.
+  const envRedditCookie = process.env.REDDIT_COOKIE
+  const isAnonymousReddit = authMode === "anonymous" || (authMode === "auto" && !hasCredentials)
+  const needsBorrow = (envRedditCookie === undefined || envRedditCookie.trim() === "") && isAnonymousReddit
+  const borrowedRedditCookie = needsBorrow
+    ? await extractRedditCookieHeader({
+        browser: (process.env.REDDIT_COOKIE_FROM ?? process.env.FACEBOOK_COOKIE_FROM ?? "chrome") as BrowserKey,
+        profile: process.env.REDDIT_COOKIE_FROM_PROFILE ?? process.env.FACEBOOK_COOKIE_FROM_PROFILE ?? "Default",
+      })
+    : ""
+  const redditCookie =
+    envRedditCookie !== undefined && envRedditCookie.trim() !== "" ? envRedditCookie : borrowedRedditCookie
+  if (needsBorrow && borrowedRedditCookie !== "") {
+    console.error("[Setup] ✓ Reddit: borrowed browser cookies (bypasses anonymous 403)")
+  }
+
   const client = initializeRedditClient({
     clientId: clientId ?? "",
     clientSecret: clientSecret ?? "",
@@ -267,6 +285,7 @@ async function setupRedditClient() {
     safeMode: safeModeConfig,
     botDisclosure: botDisclosureConfig,
     cache: cacheConfig,
+    cookieHeader: redditCookie,
   })
 
   console.error("[Setup] Reddit client initialized")
@@ -1456,7 +1475,7 @@ server.addTool({
       throw new Error("Provide at least one entry in facebook_groups or subreddits.")
     }
 
-    const columns = ["platform", "source_url", "post_url", "post_excerpt", "author", "category", "comment"]
+    const columns = ["platform", "source_url", "post_url", "post_excerpt", "author", "timestamp", "category", "comment"]
     const rows: Record<string, string>[] = []
     const errors: string[] = []
     const oneLine = (s: string) => s.replace(/\s+/g, " ").trim()
@@ -1480,6 +1499,7 @@ server.addTool({
                   post_url: thread.post.permalink ?? data.groupUrl,
                   post_excerpt: excerpt(thread.post.text),
                   author: c.author,
+                  timestamp: c.timestamp ?? "",
                   category: classifyComment(c.text),
                   comment: oneLine(c.text),
                 })
@@ -1515,6 +1535,7 @@ server.addTool({
                   post_url: `https://reddit.com${post.permalink}`,
                   post_excerpt: excerpt(post.title),
                   author: c.author,
+                  timestamp: new Date(c.createdUtc * 1000).toISOString(),
                   category: classifyComment(c.body),
                   comment: oneLine(c.body),
                 })

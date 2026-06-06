@@ -211,8 +211,10 @@ export class FacebookClient {
         result.fold(
           () => undefined,
           (data) => {
-            // Keep the feed post (richer permalink + text) for context, with the parsed comments.
-            threads.push({ post, comments: data.comments })
+            // Keep the feed post's reliable permalink; use whichever post text is richer
+            // (the feed preview vs the post's own page) so post_excerpt isn't empty.
+            const bestText = (data.post.text?.length ?? 0) > (post.text?.length ?? 0) ? data.post.text : post.text
+            threads.push({ post: { ...post, text: bestText }, comments: data.comments })
           },
         )
       }

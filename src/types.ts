@@ -38,6 +38,8 @@ export type RedditClientConfig = {
   readonly safeMode?: SafeModeConfig
   readonly botDisclosure?: BotDisclosureConfig
   readonly cache?: CacheConfig
+  /** Optional reddit.com Cookie header (from a local browser) to bypass anonymous 403 blocks. */
+  readonly cookieHeader?: string
 }
 
 export type RedditUser = {

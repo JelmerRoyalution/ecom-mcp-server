@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, functype/no-let, functype/no-imperative-loops, functype/prefer-option, functype/prefer-either, functype/prefer-fold --
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/require-await, functype/no-let, functype/no-imperative-loops, functype/prefer-option, functype/prefer-either, functype/prefer-fold --
  * External-IO boundary: reads the user's logged-in browser profile to recover their
  * Facebook session. Two strategies:
  *   1. Direct decryption (macOS/Linux): read the cookie SQLite DB + the OS keychain key
@@ -379,4 +379,65 @@ export async function extractFacebookSession(
 
   // Strategy 2: Playwright (any OS).
   return extractViaPlaywright(spec, base, profile)
+}
+
+/**
+ * Best-effort: read reddit.com cookies from a locally-installed browser and return them as a
+ * Cookie header. Sending these (even anonymous) cookies makes Reddit's JSON API serve requests
+ * that would otherwise be 403-blocked from the network. Returns "" when nothing is available.
+ *
+ * Uses macOS/Linux direct decryption (the common case); on Windows it returns "" and callers
+ * fall back to OAuth. No Reddit login is required - any reddit.com cookies suffice.
+ */
+export async function extractRedditCookieHeader(
+  opts: { readonly browser?: BrowserKey; readonly profile?: string } = {},
+): Promise<string> {
+  if (isWin) {
+    return ""
+  }
+  const spec = BROWSER_REGISTRY[opts.browser ?? "chrome"]
+  const base = spec?.userDataDir()
+  if (spec === undefined || base === undefined || !existsSync(base)) {
+    return ""
+  }
+  const profile = opts.profile ?? "Default"
+  const dbPath = cookieDbPath(base, profile)
+  if (dbPath === undefined) {
+    return ""
+  }
+
+  try {
+    const password = execFileSync("security", ["find-generic-password", "-w", "-s", spec.keychainService], {
+      encoding: "utf8",
+    }).trim()
+    const key = crypto.pbkdf2Sync(password, "saltysalt", 1003, 16, "sha1")
+    const { dir, file } = copyCookieDb(dbPath)
+    try {
+      const SEP = "|::|"
+      const sql = `SELECT host_key || '${SEP}' || name || '${SEP}' || quote(encrypted_value) FROM cookies WHERE host_key LIKE '%reddit.com'`
+      const raw = execFileSync("sqlite3", [file, sql], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 })
+      const byName = new Map<string, string>()
+      for (const line of raw.split("\n")) {
+        if (line.trim() === "") continue
+        const parts = line.split(SEP)
+        if (parts.length < 3) continue
+        const hostKey = parts[0]
+        const name = parts[1]
+        const quoted = parts.slice(2).join(SEP)
+        const hex = quoted.startsWith("X'") ? quoted.slice(2, -1) : ""
+        const value = hex.length > 0 ? decryptValue(Buffer.from(hex, "hex"), key, hostKey) : ""
+        const hasControlChars = [...value].some((ch) => ch.charCodeAt(0) < 32)
+        if (name !== undefined && name !== "" && value !== "" && !hasControlChars) {
+          byName.set(name, value)
+        }
+      }
+      return Array.from(byName.entries())
+        .map(([k, v]) => `${k}=${v}`)
+        .join("; ")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  } catch {
+    return ""
+  }
 }

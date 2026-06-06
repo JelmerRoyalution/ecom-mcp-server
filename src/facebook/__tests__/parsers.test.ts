@@ -88,11 +88,12 @@ describe("facebook parsers", () => {
           <div role="article" id="comment_1">
             <h3><a href="/profile.php?id=1">Amy</a></h3>
             <div data-ft="c"><div>Try jojoba oil, it fixed my dryness completely.</div></div>
-            <a href="/groups/skincare/permalink/111/?comment_id=901">Reply</a>
+            <a href="/groups/skincare/permalink/111/?comment_id=901">4d</a>
           </div>
           <div role="article" id="comment_2">
             <h3><a href="/profile.php?id=2">Bob</a></h3>
             <div data-ft="c"><div>I struggled too, then switched to CeraVe and it helped.</div></div>
+            <abbr>2 h</abbr>
             <a href="/groups/skincare/?comment_id=902">Reply</a>
           </div>
         </div>
@@ -109,6 +110,9 @@ describe("facebook parsers", () => {
       expect(comments.map((c) => c.author)).toEqual(["Amy", "Bob"])
       expect(comments[0].text).toContain("jojoba")
       expect(comments[1].text).toContain("CeraVe")
+      // Facebook renders a relative time label that we capture as the timestamp.
+      expect(comments[0].timestamp).toBe("4d")
+      expect(comments[1].timestamp).toBe("2 h")
       // The #ufi container must NOT appear as a giant merged comment.
       expect(comments.some((c) => c.text.includes("jojoba") && c.text.includes("CeraVe"))).toBe(false)
     })

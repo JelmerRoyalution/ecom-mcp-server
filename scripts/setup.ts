@@ -12,7 +12,12 @@ import { execSync } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
-import { type BrowserKey, detectInstalledBrowsers, extractFacebookSession } from "../src/facebook/cookie-extractor"
+import {
+  type BrowserKey,
+  detectInstalledBrowsers,
+  extractFacebookSession,
+  extractRedditCookieHeader,
+} from "../src/facebook/cookie-extractor"
 
 const ENV_PATH = join(process.cwd(), ".env")
 
@@ -64,6 +69,20 @@ async function main(): Promise<void> {
   log("")
 
   ensureChromium()
+  log("")
+
+  // Borrow reddit.com cookies too (bypasses Reddit's anonymous 403). Independent of Facebook.
+  try {
+    const redditCookie = await extractRedditCookieHeader({ browser: target, profile })
+    if (redditCookie !== "") {
+      mergeEnv({ REDDIT_COOKIE: redditCookie })
+      log("• Reddit: ✓ connected (borrowed browser cookies - no Reddit account needed)")
+    } else {
+      log("• Reddit: works without setup on most networks (tip: visit reddit.com once in your browser)")
+    }
+  } catch {
+    // Best-effort; Reddit still works anonymously on many networks.
+  }
   log("")
   log(`• Reading your Facebook login from ${target}… (a hidden browser may flash briefly)`)
 

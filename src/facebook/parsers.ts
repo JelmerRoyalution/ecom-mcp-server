@@ -398,11 +398,43 @@ function parseComments($: Api, postText: string, postEl?: unknown): readonly Fac
       authorProfileUrl: author.profileUrl,
       text,
       permalink,
+      timestamp: extractCommentTime($, container),
       depth: estimateDepth(container),
     })
   })
 
   return comments
+}
+
+/** Recognize a Facebook time label like "4d", "2 h", "Just now", or "March 20 at 8:41 AM". */
+function isTimeLike(text: string): boolean {
+  const t = text.trim().toLowerCase()
+  if (/^(just now|now|yesterday|today)$/.test(t)) {
+    return true
+  }
+  if (
+    /^\d+\s*(s|m|h|d|w|y|sec|secs?|min|mins?|hr|hrs?|hour|hours?|day|days?|week|weeks?|month|months?|year|years?)$/.test(
+      t,
+    )
+  ) {
+    return true
+  }
+  return /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/.test(t) && /\d/.test(t)
+}
+
+/** Best-effort comment timestamp: the time label Facebook renders on the comment. */
+function extractCommentTime($: Api, container: Selection): string | undefined {
+  let found: string | undefined
+  container.find("a[href], abbr").each((_i, el) => {
+    if (found !== undefined) {
+      return
+    }
+    const text = cleanText($(el).text())
+    if (text.length > 0 && text.length <= 28 && isTimeLike(text)) {
+      found = text
+    }
+  })
+  return found
 }
 
 function findCommentPermalink($: Api, container: Selection): string | undefined {
