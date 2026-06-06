@@ -24,97 +24,91 @@ _Listen to your market in their own words. Understand what they really want. Sel
 ---
 
 > [!TIP]
-> **Not technical? That's fine.** You don't need to write code. Skip to **[🚀 Quick Start](#-quick-start-no-coding-needed)** - open the folder in Claude, say _"set up the Facebook scraper"_, and start researching.
+> **New here and not technical? You're in the right place.** 👇
+> Just follow **[👉 Start Here](#-start-here-read-this-first)** step by step. No coding, no jargon.
 
-## 💡 Why this exists
+# 👉 Start Here (read this first)
 
-Great e-commerce copy isn't invented - it's **overheard**. Your future customers are already describing their pains, desires, and objections in Reddit threads and Facebook groups, in their own words.
+**What this does:** it reads the conversations inside your Facebook groups (and Reddit) and turns them into a ready-to-use **customer persona** for your product - written in your customers' own words.
 
-This tool reads those conversations for you and organizes them into a **customer persona** using Eugene Schwartz's legendary _Breakthrough Advertising_ framework - so you know exactly **what to say, to whom, and when**.
-
-<table>
-<tr>
-<td width="33%" valign="top">
-
-### 👂 Listen
-
-Scrape discussions from **Reddit** and **public _and_ private Facebook groups** you're a member of.
-
-</td>
-<td width="33%" valign="top">
-
-### 🧠 Understand
-
-Auto-mine **voice of customer**: pains, desires, objections, questions, emotional triggers, and verbatim quotes.
-
-</td>
-<td width="33%" valign="top">
-
-### 🎯 Sell
-
-Get a **Schwartz persona**: mass desire, awareness stage, sophistication level + ready-to-use headline angles.
-
-</td>
-</tr>
-</table>
-
-## 🧭 How it works
-
-```mermaid
-flowchart LR
-    L["🔐 Your browser login<br/>(Chrome / Brave / Edge / Arc…)"] -->|"pnpm run setup"| ENV[(".env<br/>local & private")]
-    ENV --> S{{"🛒 Ecom Research<br/>MCP Server"}}
-    R["👽 Reddit<br/>subreddits & comments"] --> S
-    F["📘 Facebook<br/>public & private groups"] --> S
-    S --> V["🗣️ Voice of Customer<br/>pains · desires · objections · quotes"]
-    V --> P["📋 Customer Persona<br/>Schwartz Breakthrough Advertising"]
-    P --> C["✍️ Copy, ads & offers<br/>that actually resonate"]
-```
-
-## 🚀 Quick Start (No Coding Needed)
-
-**You need:** a browser (Chrome, Brave, Edge, Arc…), a Facebook account that's a member of the groups you want to research, and [Claude Code](https://claude.com/claude-code) (also works with Claude Desktop and Cowork - see [Which Claude can run it?](#-which-claude-can-run-it)).
-
-|     | Step         | What to do                                                                                                                                               |
-| --- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1️⃣  | **Open**     | Open this folder in **Claude Code**.                                                                                                                     |
-| 2️⃣  | **Log in**   | Make sure you're **logged into Facebook** in your normal browser.                                                                                        |
-| 3️⃣  | **Set up**   | Tell Claude: _**"Set up the Facebook scraper."**_ It runs `pnpm install` + `pnpm run setup` and grabs your login automatically - **no cookies to copy**. |
-| 4️⃣  | **Research** | Ask away (see prompts below). 🎉                                                                                                                         |
+**How it gets into Facebook:** it simply **borrows the Facebook login you already have open in your browser**. It never asks for your password.
 
 > [!IMPORTANT]
-> On a Mac you may see a **one-time** _"Chrome Safe Storage"_ keychain prompt during setup - click **Always Allow**. Your login is saved **only** to a local, git-ignored `.env` file. It's never uploaded or committed.
+>
+> ## 🔑 The one golden rule
+>
+> The tool can only see what **you** can see in **your own** Facebook account.
+>
+> ✅ If you can open a group in your browser and read the posts, **the tool can too.**
+> ❌ If you can't open it, **the tool can't either.**
+
+## ✅ Before you start, check these 4 things
+
+- [ ] **1. You have a browser.** Google Chrome (or Brave, Edge, or Arc) is installed on this computer.
+- [ ] **2. You are logged in to Facebook** in that browser. Open [facebook.com](https://facebook.com): do you see your normal news feed? Then you're logged in. If you see a login screen, **log in first**.
+- [ ] **3. For PRIVATE groups: you are already a MEMBER of the group.** 👈 This one is important. The tool **cannot** get into a private group that you yourself have not joined. So first, in Facebook: open the group, click **Join**, answer any membership questions, and **wait until an admin approves you**. Only after you're a member can the tool read it. _(Public groups and Facebook Pages need no membership - anyone can read those.)_
+- [ ] **4. You have Claude Code** open with this project folder.
+
+## 🚀 Now do these 3 things
+
+> ### 1. Log in & join
+>
+> **Log in to Facebook** in your normal browser, and **join every group** you want to research.
+>
+> ### 2. Connect (one time)
+>
+> In Claude, type: **_"Set up the Facebook scraper."_**
+> It grabs your login from your browser automatically. **You never copy a password or a cookie.**
+>
+> ### 3. Research
+>
+> In Claude, type: **_"Scrape this group and build me a customer persona: `<paste the group link>`."_**
+
+🎉 **That's it.** Claude reads the group and hands you a persona you can sell to.
 
 <details>
-<summary><b>⌨️ Prefer the command line?</b></summary>
+<summary><b>❓ Where do I find the "group link"?</b></summary>
 
-```bash
-pnpm install
-pnpm run setup                # auto-detects your browser & grabs your Facebook login
-# pick a browser:             pnpm run setup brave
-# pick a specific profile:    pnpm run setup chrome "Profile 1"
+<br/>
+
+Open the group in your browser. Look at the **address bar** at the very top of the window and copy the whole web address. It looks like this:
+
+```
+https://www.facebook.com/groups/123456789
 ```
 
-Supported browsers: **Chrome, Brave, Edge, Arc, Chromium, Vivaldi, Opera**. Re-run `pnpm run setup` anytime you log in again.
+Paste that into Claude. That's the group link. 👍
 
 </details>
 
-## 🤝 Which Claude can run it?
-
-It's a standard MCP server, so it plugs into any Claude that supports MCP:
-
-| Claude client                     | Works? | Notes                                                                           |
-| --------------------------------- | :----: | ------------------------------------------------------------------------------- |
-| **Claude Code**                   |   ✅   | Full experience, including the automatic browser-login pickup. **Recommended.** |
-| **Claude Desktop**                |   ✅   | Runs locally too, so the auto-login works. Add it as a local MCP server.        |
-| **Claude Cowork** / **claude.ai** |  ✅\*  | Add it as an MCP connector.                                                     |
-
 > [!NOTE]
-> \*With **Cowork / claude.ai**, MCP connectors run in Anthropic's cloud, not on your computer, so they can't read your local browser. The one-time **auto-login pickup (`pnpm run setup`) is a local feature** - run it once on your own machine (via Claude Code or Claude Desktop) to get your `FACEBOOK_COOKIE`, then paste that into the Cowork connector's settings. After that, scraping works the same everywhere.
+> The first time on a Mac, a small system pop-up may appear ("Chrome Safe Storage"). That's just macOS asking permission for the tool to read **your own** browser login. Click **Always Allow** (you might type your Mac password once). It's safe, and it only happens once.
+
+## 🆘 Something not working? (the fix for every common snag)
+
+Don't worry, almost every hiccup is one of these. Find your situation on the left.
+
+| What happened                                              | What it means                                             | ✅ What to do                                                                                                                                                                                          |
+| ---------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **"No Facebook login found"**                              | The tool didn't find a logged-in Facebook in that browser | Open [facebook.com](https://facebook.com) and make sure you're logged in. Then run setup again. If your Facebook is in a **different** browser, tell Claude which one (e.g. _"set it up with Brave"_). |
+| **A private group gives nothing / "you must be a member"** | Your account isn't inside that group yet                  | In Facebook, open the group → click **Join** → wait until you're **approved**. Then try again. The tool can't enter a group you haven't joined.                                                        |
+| **You use Brave / Edge / Arc, not Chrome**                 | Setup checks Chrome by default                            | Tell Claude: _"set it up with Brave"_ (or edge / arc). Command line: `pnpm run setup brave`.                                                                                                           |
+| **You have 2 Facebook accounts or browser profiles**       | Setup uses your main ("Default") profile                  | Log into the **right** account in your main browser window. If your Facebook lives in another profile, tell Claude the profile name (e.g. `pnpm run setup chrome "Profile 1"`).                        |
+| **A Mac keychain pop-up appeared**                         | macOS is asking permission to read your own browser login | Click **Always Allow** (type your Mac password if asked). Normal and safe.                                                                                                                             |
+| **Facebook shows a "confirm it's you" / security check**   | You went too fast, or Facebook wants to re-verify         | Slow down, run setup again to refresh your login, and make sure you can browse Facebook normally in your own browser.                                                                                  |
+| **You logged out or changed your Facebook password**       | Your saved login is no longer valid                       | Log back in to Facebook in your browser, then run setup again.                                                                                                                                         |
+| **You used an Incognito / private window**                 | Incognito keeps no saved login                            | Use your **normal** browser window where you're logged in.                                                                                                                                             |
+| **`pnpm setup` seems to do nothing**                       | `pnpm setup` is a reserved system command                 | Use **`pnpm run setup`** (with the word "run").                                                                                                                                                        |
+| **"Is my login safe?"**                                    | Yes                                                       | Your login is saved **only** on your computer, in a hidden `.env` file. It is never uploaded, committed, or shared.                                                                                    |
+| **Reddit - do I need to log in?**                          | No                                                        | Reddit works with **no login at all**. Just ask Claude to scrape a subreddit.                                                                                                                          |
+
+> Still stuck? Just **tell Claude what happened in plain words** - it can read the error and walk you through the fix.
+
+---
 
 ## 💬 Talk to it - example prompts
 
-Once it's set up, just chat with Claude:
+Once it's set up, just chat with Claude in normal language:
 
 ```text
 "Scrape this Facebook group and build me a customer persona:
@@ -135,6 +129,32 @@ Once it's set up, just chat with Claude:
 "From everything you scraped, write 3 ad headlines in the Schwartz style
  that channel their #1 mass desire."
 ```
+
+## 🧭 How it works
+
+```mermaid
+flowchart LR
+    L["🔐 Your browser login<br/>(Chrome / Brave / Edge / Arc…)"] -->|"pnpm run setup"| ENV[(".env<br/>local & private")]
+    ENV --> S{{"🛒 Ecom Research<br/>MCP Server"}}
+    R["👽 Reddit<br/>subreddits & comments"] --> S
+    F["📘 Facebook<br/>public & private groups"] --> S
+    S --> V["🗣️ Voice of Customer<br/>pains · desires · objections · quotes"]
+    V --> P["📋 Customer Persona<br/>Schwartz Breakthrough Advertising"]
+    P --> C["✍️ Copy, ads & offers<br/>that actually resonate"]
+```
+
+## 🤝 Which Claude can run it?
+
+It's a standard MCP server, so it plugs into any Claude that supports MCP:
+
+| Claude client                     | Works? | Notes                                                                           |
+| --------------------------------- | :----: | ------------------------------------------------------------------------------- |
+| **Claude Code**                   |   ✅   | Full experience, including the automatic browser-login pickup. **Recommended.** |
+| **Claude Desktop**                |   ✅   | Runs locally too, so the auto-login works. Add it as a local MCP server.        |
+| **Claude Cowork** / **claude.ai** |  ✅\*  | Add it as an MCP connector.                                                     |
+
+> [!NOTE]
+> \*With **Cowork / claude.ai**, MCP connectors run in Anthropic's cloud, not on your computer, so they can't read your local browser. The one-time **auto-login pickup (`pnpm run setup`) is a local feature** - run it once on your own machine (via Claude Code or Claude Desktop) to get your `FACEBOOK_COOKIE`, then paste that into the Cowork connector's settings. After that, scraping works the same everywhere.
 
 ## 🛠️ What's inside
 
@@ -206,6 +226,20 @@ The easiest path is `pnpm run setup`. Under the hood it fills these in `.env`:
 </details>
 
 <details>
+<summary><b>⌨️ Command-line setup (instead of asking Claude)</b></summary>
+
+```bash
+pnpm install
+pnpm run setup                # auto-detects your browser & grabs your Facebook login
+# pick a browser:             pnpm run setup brave
+# pick a specific profile:    pnpm run setup chrome "Profile 1"
+```
+
+Supported browsers: **Chrome, Brave, Edge, Arc, Chromium, Vivaldi, Opera**. Re-run `pnpm run setup` anytime you log in again.
+
+</details>
+
+<details>
 <summary><b>👽 Reddit configuration (auth tiers, safe mode, bot disclosure)</b></summary>
 
 | Variable                                    | Default     | Description                                    |
@@ -248,19 +282,6 @@ The repo ships a ready-to-use `.mcp.json` (Claude Code auto-loads it). To regist
 TRANSPORT_TYPE=httpStream PORT=3000 node dist/index.js
 # optional OAuth: OAUTH_ENABLED=true OAUTH_TOKEN=...
 ```
-
-</details>
-
-<details>
-<summary><b>🩺 Troubleshooting</b></summary>
-
-| Problem                       | Fix                                                                                                                 |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| _"No Facebook login found"_   | Log into Facebook in that browser first, then re-run `pnpm run setup`. Try another browser: `pnpm run setup brave`. |
-| Setup can't read cookies      | Make sure the browser is installed and you're logged in. On macOS, allow the keychain prompt.                       |
-| Private group returns nothing | Your account must be a **member** of the group. Use `FACEBOOK_ENGINE=browser`.                                      |
-| Facebook shows a checkpoint   | Slow down (raise `FACEBOOK_MIN_DELAY_MS`) and re-run `pnpm run setup` to refresh your session.                      |
-| `pnpm setup` does nothing     | Use `pnpm run setup` - bare `pnpm setup` is a reserved pnpm command.                                                |
 
 </details>
 
