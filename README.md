@@ -33,6 +33,9 @@ _Listen to your market in their own words. Understand what they really want. Sel
 
 **How it gets into Facebook:** it simply **borrows the Facebook login you already have open in your browser**. It never asks for your password.
 
+> [!TIP]
+> **Two sources - and Reddit is instant.** 👽 **Reddit needs no login and no setup at all.** In Claude you can immediately say _"Scrape r/SkincareAddiction and list the 5 biggest customer pains."_ The setup steps below are only for 📘 **Facebook**, so it can read groups with your own login.
+
 > [!IMPORTANT]
 >
 > ## 🔑 The one golden rule
@@ -108,7 +111,16 @@ Don't worry, almost every hiccup is one of these. Find your situation on the lef
 
 ## 💬 Talk to it - example prompts
 
-Once it's set up, just chat with Claude in normal language:
+Just chat with Claude in normal language. **Reddit works instantly; Facebook uses the one-time setup above.**
+
+**👽 Reddit (no setup needed):**
+
+```text
+"Scrape the top posts and comments from r/SkincareAddiction this month,
+ and list the 5 biggest frustrations in customers' own words."
+```
+
+**📘 Facebook:**
 
 ```text
 "Scrape this Facebook group and build me a customer persona:
@@ -158,7 +170,24 @@ It's a standard MCP server, so it plugs into any Claude that supports MCP:
 
 ## 🛠️ What's inside
 
-### 📘 Facebook tools
+Three toolsets your Claude can use:
+
+### 👽 Reddit tools · _no login, works instantly_
+
+| Tool                                                     | What it does                                                   |
+| -------------------------------------------------------- | -------------------------------------------------------------- |
+| `browse_subreddit`                                       | Browse a subreddit by hot / new / top / rising / controversial |
+| `get_top_posts`                                          | Top posts from a subreddit or the Reddit home feed             |
+| `search_reddit`                                          | Search all of Reddit for posts on any topic                    |
+| `get_post_comments`                                      | Get a post's full comment thread                               |
+| `get_reddit_post`                                        | A single post with engagement analysis                         |
+| `get_subreddit_info`                                     | Subreddit stats and community insights                         |
+| `get_trending_subreddits`                                | What's trending on Reddit right now                            |
+| `get_user_info` · `get_user_posts` · `get_user_comments` | Research a specific Reddit user                                |
+
+> ✍️ **Optional write tools** (need your Reddit username/password, with built-in spam-safe mode): `create_post` · `reply_to_post` · `edit_post` · `edit_comment` · `delete_post` · `delete_comment`.
+
+### 📘 Facebook tools · _uses your browser login_
 
 | Tool                         | What it does                                                |
 | ---------------------------- | ----------------------------------------------------------- |
@@ -169,25 +198,14 @@ It's a standard MCP server, so it plugs into any Claude that supports MCP:
 | `facebook_get_page_posts`    | Scrape a public **Page** feed (e.g. a competitor)           |
 | `test_facebook_connection`   | Check your login / engine status                            |
 
-### 🎯 Customer-persona tools (Schwartz _Breakthrough Advertising_)
+### 🎯 Customer-persona tools (Schwartz _Breakthrough Advertising_) · _Reddit, Facebook, or both_
 
 | Tool                        | What it does                                                                                                                  |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `analyze_voice_of_customer` | Mine any text into **pains, desires, objections, questions, triggers, quotes**                                                |
 | `build_customer_persona`    | Build a full persona brief: **mass desire**, the **5 awareness stages**, the **5 sophistication levels**, and headline angles |
 
-> 💡 These work on **Reddit, Facebook, or both** - feed them whatever you scraped.
-
-<details>
-<summary><b>👽 Reddit tools (read &amp; write)</b></summary>
-
-**Read:** `get_reddit_post` · `get_top_posts` · `browse_subreddit` · `search_reddit` · `get_post_comments` · `get_user_info` · `get_user_posts` · `get_user_comments` · `get_subreddit_info` · `get_trending_subreddits`
-
-**Write (needs Reddit login):** `create_post` · `reply_to_post` · `edit_post` · `edit_comment` · `delete_post` · `delete_comment`
-
-Reddit works **with zero setup** in anonymous mode, or add credentials for higher rate limits and posting. See [Advanced configuration](#-advanced-configuration).
-
-</details>
+> 💡 Mix sources freely - combine Reddit threads and Facebook group discussions into one persona.
 
 ## 🧠 The framework: why "personas," done right
 
