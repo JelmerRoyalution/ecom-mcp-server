@@ -225,11 +225,11 @@ Three toolsets your Claude can use:
 
 ### 🎯 Customer-persona tools (Schwartz _Breakthrough Advertising_) · _Reddit, Facebook, or both_
 
-| Tool                        | What it does                                                                                                                                                                      |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `analyze_voice_of_customer` | Mine any text into **pains, desires, objections, questions, triggers, quotes**                                                                                                    |
-| `build_customer_persona`    | Build a full persona brief: **mass desire**, the **5 awareness stages**, the **5 sophistication levels**, and headline angles                                                     |
-| `export_comments_csv`       | Scrape comments from Facebook groups and/or subreddits to a **CSV** - one row per comment (platform, source, post link, author, category, text), low-value reactions filtered out |
+| Tool                        | What it does                                                                                                                                                                                                                                                              |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `analyze_voice_of_customer` | Mine any text into **pains, desires, objections, questions, triggers, quotes**                                                                                                                                                                                            |
+| `build_customer_persona`    | Build a full persona brief from **posts + their comments**: **mass desire**, the **5 awareness stages**, the **5 sophistication levels**, and headline angles                                                                                                             |
+| `export_comments_csv`       | Scrape Facebook groups and/or subreddits to a **CSV** - one row per **post and comment**, linked by a shared `post_id` (+ `row_type`), with author, timestamp, category and text. Sort by `post_id` to see each post with its comments. Low-value reactions filtered out. |
 
 > 💡 Mix sources freely - combine Reddit threads and Facebook group discussions into one persona or one CSV.
 

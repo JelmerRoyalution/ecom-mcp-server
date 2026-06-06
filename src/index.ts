@@ -1391,72 +1391,204 @@ ${list(voc.quotes)}`)
   },
 })
 
+/* eslint-disable functype/no-imperative-loops, functype/prefer-map -- these tools fan out over
+   sources/posts/comments and accumulate rows; nested loops are the clearest expression. */
+
+// One flat row of voice-of-customer data. Each post emits a row_type="post" row, then its
+// comments as row_type="comment" rows sharing the same post_id - so the post<->comment
+// relationship is explicit (group or sort by post_id).
+type VocRow = {
+  platform: "facebook" | "reddit"
+  source_url: string
+  post_id: string
+  post_url: string
+  row_type: "post" | "comment"
+  author: string
+  timestamp: string
+  category: string
+  text: string
+}
+
+const VOC_COLUMNS = [
+  "platform",
+  "source_url",
+  "post_id",
+  "post_url",
+  "row_type",
+  "author",
+  "timestamp",
+  "category",
+  "text",
+]
+
+const oneLineText = (s: string): string => s.replace(/\s+/g, " ").trim()
+
+// Deep-scrape posts AND their comment threads from Facebook groups and/or subreddits.
+async function gatherVoiceRows(opts: {
+  readonly facebookGroups: readonly string[]
+  readonly subreddits: readonly string[]
+  readonly postsPerSource: number
+  readonly redditTime: string
+  readonly errors: string[]
+}): Promise<VocRow[]> {
+  const rows: VocRow[] = []
+
+  for (const group of opts.facebookGroups) {
+    const fb = unwrapFacebookClient()
+    const result = await fb.getGroupComments(group, { postLimit: opts.postsPerSource })
+    result.fold(
+      (err) => {
+        opts.errors.push(`Facebook "${group}": ${err.message}`)
+      },
+      (data) => {
+        for (const thread of data.threads) {
+          const postId = thread.post.id
+          const postUrl = thread.post.permalink ?? data.groupUrl
+          rows.push({
+            platform: "facebook",
+            source_url: data.groupUrl,
+            post_id: postId,
+            post_url: postUrl,
+            row_type: "post",
+            author: thread.post.author,
+            timestamp: thread.post.timestamp ?? "",
+            category: classifyComment(thread.post.text),
+            text: oneLineText(thread.post.text),
+          })
+          for (const c of thread.comments) {
+            rows.push({
+              platform: "facebook",
+              source_url: data.groupUrl,
+              post_id: postId,
+              post_url: postUrl,
+              row_type: "comment",
+              author: c.author,
+              timestamp: c.timestamp ?? "",
+              category: classifyComment(c.text),
+              text: oneLineText(c.text),
+            })
+          }
+        }
+      },
+    )
+  }
+
+  for (const sub of opts.subreddits) {
+    const reddit = unwrapClient()
+    const cleanSub = sub.replace(/^r\//i, "")
+    const sourceUrl = `https://reddit.com/r/${cleanSub}`
+    const postsResult = await reddit.getTopPosts(cleanSub, opts.redditTime, opts.postsPerSource)
+    const posts = postsResult.fold(
+      (err) => {
+        opts.errors.push(`Reddit r/${cleanSub}: ${err.message}`)
+        return []
+      },
+      (p) => p,
+    )
+    for (const post of posts) {
+      const postUrl = `https://reddit.com${post.permalink}`
+      const postText = [post.title, post.selftext].filter((t) => t !== undefined && t.trim() !== "").join("\n")
+      rows.push({
+        platform: "reddit",
+        source_url: sourceUrl,
+        post_id: post.id,
+        post_url: postUrl,
+        row_type: "post",
+        author: post.author,
+        timestamp: new Date(post.createdUtc * 1000).toISOString(),
+        category: classifyComment(postText),
+        text: oneLineText(postText),
+      })
+      const commentsResult = await reddit.getPostComments(post.id, cleanSub, { limit: 200 })
+      commentsResult.fold(
+        () => undefined,
+        ({ comments }) => {
+          for (const c of comments) {
+            rows.push({
+              platform: "reddit",
+              source_url: sourceUrl,
+              post_id: post.id,
+              post_url: postUrl,
+              row_type: "comment",
+              author: c.author,
+              timestamp: new Date(c.createdUtc * 1000).toISOString(),
+              category: classifyComment(c.body),
+              text: oneLineText(c.body),
+            })
+          }
+        },
+      )
+    }
+  }
+
+  return rows
+}
+
 server.addTool({
   name: "build_customer_persona",
   description:
     "Build a Schwartz 'Breakthrough Advertising' customer persona brief from customer discussion. Provide raw " +
-    "'texts' (comments/posts from Facebook or Reddit) and/or a 'facebook_group' to auto-scrape. Returns mined " +
-    "evidence organized into mass desire, awareness stages, and market sophistication, with synthesis instructions.",
+    "'texts' and/or a 'facebook_group'/'subreddits' to auto-scrape (it pulls POSTS *and* their COMMENTS). Returns " +
+    "mined evidence organized into mass desire, awareness stages, and market sophistication, plus synthesis steps.",
   parameters: z.object({
-    texts: z.array(z.string()).default([]).describe("Raw customer discussion snippets to analyze (comments/posts)"),
-    facebook_group: z
-      .string()
-      .optional()
-      .describe("Optional Facebook group id/slug/URL - its feed posts are scraped and added to the corpus"),
-    facebook_post_limit: z.number().min(1).max(100).default(30).describe("Posts to scrape when facebook_group is set"),
+    texts: z.array(z.string()).default([]).describe("Raw customer discussion snippets to analyze (optional)"),
+    facebook_group: z.string().optional().describe("Optional Facebook group id/slug/URL - posts + comments scraped"),
+    subreddits: z.array(z.string()).default([]).describe("Optional subreddits to scrape posts + comments from"),
+    posts_per_source: z.number().min(1).max(100).default(25).describe("Posts to open per source"),
+    reddit_time: z
+      .enum(["hour", "day", "week", "month", "year", "all"])
+      .default("month")
+      .describe("Reddit time window"),
     product_context: z.string().optional().describe("Optional product/niche context to frame the persona"),
   }),
   execute: async (args) => {
-    const group = args.facebook_group?.trim() ?? ""
-    const scraped: readonly string[] =
-      group !== ""
-        ? await (async () => {
-            const fb = unwrapFacebookClient()
-            const result = await fb.getGroupFeed(group, args.facebook_post_limit)
-            return result.fold(
-              (err) => {
-                console.error(`[Facebook] persona scrape warning: ${err.message}`)
-                return [] as readonly string[]
-              },
-              (posts) => posts.map((p) => p.text).filter((t) => t.trim().length > 0),
-            )
-          })()
+    const errors: string[] = []
+    const fbGroups =
+      args.facebook_group !== undefined && args.facebook_group.trim() !== "" ? [args.facebook_group.trim()] : []
+    const rows =
+      fbGroups.length > 0 || args.subreddits.length > 0
+        ? await gatherVoiceRows({
+            facebookGroups: fbGroups,
+            subreddits: args.subreddits,
+            postsPerSource: args.posts_per_source,
+            redditTime: args.reddit_time,
+            errors,
+          })
         : []
 
-    const texts = [...args.texts, ...scraped]
+    // Feed posts plus valuable comments into the persona corpus.
+    const scrapedTexts = rows
+      .filter((r) => r.text.trim().length > 0 && (r.row_type === "post" || isValuableComment(r.text)))
+      .map((r) => r.text)
+    const texts = [...args.texts, ...scrapedTexts]
     if (texts.length === 0) {
       // eslint-disable-next-line functype/prefer-either
-      throw new Error("Provide 'texts' and/or a 'facebook_group' with accessible posts to build a persona.")
+      throw new Error("Provide 'texts' and/or a 'facebook_group'/'subreddits' with accessible content.")
     }
 
+    const sources = [...fbGroups.map((g) => `FB:${g}`), ...args.subreddits.map((s) => `r/${s.replace(/^r\//i, "")}`)]
     const sourceLabel =
-      group !== ""
-        ? `Facebook group "${group}" (${scraped.length} posts)${args.texts.length > 0 ? " + supplied texts" : ""}`
+      sources.length > 0
+        ? `${sources.join(", ")} (${scrapedTexts.length} posts + comments)${args.texts.length > 0 ? " + supplied texts" : ""}`
         : "supplied discussion corpus"
 
-    return buildPersonaBrief({
-      texts,
-      productContext: args.product_context,
-      sourceLabel,
-    })
+    return buildPersonaBrief({ texts, productContext: args.product_context, sourceLabel })
   },
 })
 
-/* eslint-disable functype/no-imperative-loops, functype/prefer-map -- this tool fans out over
-   sources/posts/comments and accumulates CSV rows; nested loops are the clearest expression. */
 server.addTool({
   name: "export_comments_csv",
   description:
-    "Scrape comments from Facebook groups and/or Reddit subreddits and save them to a CSV file - one row " +
-    "per comment, with columns: platform (reddit/facebook), source_url, post_url, post_excerpt, author, " +
-    "category (pain/desire/objection/question/other), and the comment text. Low-value reactions (like " +
-    "'following' or 'thanks') are filtered out by default. Great for building a voice-of-customer dataset.",
+    "Scrape Facebook groups and/or Reddit subreddits to a CSV - one row per POST and per COMMENT, linked by a " +
+    "shared post_id (with a row_type of 'post' or 'comment'). Columns: platform, source_url, post_id, post_url, " +
+    "row_type, author, timestamp, category (pain/desire/objection/question/other), text. Sort by post_id to see " +
+    "each post with its comments. Low-value reactions are filtered out by default.",
   parameters: z.object({
     facebook_groups: z
       .array(z.string())
       .default([])
-      .describe("Facebook group ids, slugs, or URLs to scrape comments from (must be a member of private ones)"),
-    subreddits: z.array(z.string()).default([]).describe("Subreddit names to scrape comments from (without the r/)"),
+      .describe("Facebook group ids, slugs, or URLs to scrape (must be a member of private ones)"),
+    subreddits: z.array(z.string()).default([]).describe("Subreddit names to scrape (without the r/)"),
     posts_per_source: z.number().min(1).max(200).default(30).describe("How many recent posts to open per source"),
     min_words: z.number().min(1).max(50).default(4).describe("Minimum words for a comment to count as valuable"),
     include_low_value: z.boolean().default(false).describe("Keep low-signal reactions too (default: filter them out)"),
@@ -1475,83 +1607,25 @@ server.addTool({
       throw new Error("Provide at least one entry in facebook_groups or subreddits.")
     }
 
-    const columns = ["platform", "source_url", "post_url", "post_excerpt", "author", "timestamp", "category", "comment"]
-    const rows: Record<string, string>[] = []
     const errors: string[] = []
-    const oneLine = (s: string) => s.replace(/\s+/g, " ").trim()
-    const excerpt = (s: string) => oneLine(s).slice(0, 160)
+    const rows = await gatherVoiceRows({
+      facebookGroups: args.facebook_groups,
+      subreddits: args.subreddits,
+      postsPerSource: args.posts_per_source,
+      redditTime: args.reddit_time,
+      errors,
+    })
 
-    // Facebook: feed -> open each post -> pull its comment thread.
-    if (args.facebook_groups.length > 0) {
-      const fb = unwrapFacebookClient()
-      for (const group of args.facebook_groups) {
-        const result = await fb.getGroupComments(group, { postLimit: args.posts_per_source })
-        result.fold(
-          (err) => {
-            errors.push(`Facebook "${group}": ${err.message}`)
-          },
-          (data) => {
-            for (const thread of data.threads) {
-              for (const c of thread.comments) {
-                rows.push({
-                  platform: "facebook",
-                  source_url: data.groupUrl,
-                  post_url: thread.post.permalink ?? data.groupUrl,
-                  post_excerpt: excerpt(thread.post.text),
-                  author: c.author,
-                  timestamp: c.timestamp ?? "",
-                  category: classifyComment(c.text),
-                  comment: oneLine(c.text),
-                })
-              }
-            }
-          },
-        )
-      }
-    }
-
-    // Reddit: top posts -> each post's comments.
-    if (args.subreddits.length > 0) {
-      const reddit = unwrapClient()
-      for (const sub of args.subreddits) {
-        const cleanSub = sub.replace(/^r\//i, "")
-        const postsResult = await reddit.getTopPosts(cleanSub, args.reddit_time, args.posts_per_source)
-        const posts = postsResult.fold(
-          (err) => {
-            errors.push(`Reddit r/${cleanSub}: ${err.message}`)
-            return []
-          },
-          (p) => p,
-        )
-        for (const post of posts) {
-          const commentsResult = await reddit.getPostComments(post.id, cleanSub, { limit: 200 })
-          commentsResult.fold(
-            () => undefined,
-            ({ comments }) => {
-              for (const c of comments) {
-                rows.push({
-                  platform: "reddit",
-                  source_url: `https://reddit.com/r/${cleanSub}`,
-                  post_url: `https://reddit.com${post.permalink}`,
-                  post_excerpt: excerpt(post.title),
-                  author: c.author,
-                  timestamp: new Date(c.createdUtc * 1000).toISOString(),
-                  category: classifyComment(c.body),
-                  comment: oneLine(c.body),
-                })
-              }
-            },
-          )
-        }
-      }
-    }
-
-    const kept = args.include_low_value ? rows : rows.filter((r) => isValuableComment(r.comment, args.min_words))
-
-    // Drop exact-duplicate comments (same platform + text).
+    // Keep every post; filter comments by value. Drop empties and exact duplicates.
     const seen = new Set<string>()
-    const deduped = kept.filter((r) => {
-      const key = `${r.platform}|${r.comment.toLowerCase()}`
+    const kept = rows.filter((r) => {
+      if (r.text.trim() === "") {
+        return false
+      }
+      if (r.row_type === "comment" && !args.include_low_value && !isValuableComment(r.text, args.min_words)) {
+        return false
+      }
+      const key = `${r.platform}|${r.row_type}|${r.text.toLowerCase()}`
       if (seen.has(key)) {
         return false
       }
@@ -1559,12 +1633,10 @@ server.addTool({
       return true
     })
 
-    if (deduped.length === 0) {
+    if (kept.length === 0) {
       const detail = errors.length > 0 ? `\n\nIssues:\n- ${errors.join("\n- ")}` : ""
       // eslint-disable-next-line functype/prefer-either
-      throw new Error(
-        `No comments were scraped. Make sure you're logged in and a member of any private groups.${detail}`,
-      )
+      throw new Error(`Nothing was scraped. Make sure you're logged in and a member of any private groups.${detail}`)
     }
 
     const stamp = new Date().toISOString().replace(/:/g, "-").replace(/\..+$/, "").replace("T", "_")
@@ -1576,26 +1648,29 @@ server.addTool({
           : join(process.cwd(), args.output_path)
         : join(process.cwd(), fileName)
 
-    writeFileSync(target, toCsv(columns, deduped), "utf8")
+    writeFileSync(target, toCsv(VOC_COLUMNS, kept as unknown as Record<string, string>[]), "utf8")
 
-    const fbCount = deduped.filter((r) => r.platform === "facebook").length
-    const redditCount = deduped.filter((r) => r.platform === "reddit").length
+    const postCount = kept.filter((r) => r.row_type === "post").length
+    const commentCount = kept.filter((r) => r.row_type === "comment").length
+    const fbCount = kept.filter((r) => r.platform === "facebook").length
+    const redditCount = kept.filter((r) => r.platform === "reddit").length
     const cats = ["pain", "desire", "objection", "question", "other"]
-      .map((cat) => `${cat}=${deduped.filter((r) => r.category === cat).length}`)
+      .map((cat) => `${cat}=${kept.filter((r) => r.category === cat).length}`)
       .join(", ")
-    const preview = deduped
+    const preview = kept
       .slice(0, 5)
-      .map((r) => `- [${r.platform} · ${r.category}] ${r.comment.slice(0, 110)}`)
+      .map((r) => `- [${r.platform} · ${r.row_type} · ${r.category}] ${r.text.slice(0, 100)}`)
       .join("\n")
 
     return `# Voice-of-Customer CSV exported ✅
 
-Saved **${deduped.length}** comments to:
+Saved **${kept.length}** rows (${postCount} posts + ${commentCount} comments) to:
 \`${target}\`
 
 - Platform: facebook=${fbCount}, reddit=${redditCount}
 - Category: ${cats}
-- Columns: ${columns.join(", ")}
+- Columns: ${VOC_COLUMNS.join(", ")}
+- 🔗 Each comment links to its post via **post_id** (sort by post_id to group them).
 ${errors.length > 0 ? `\n⚠️ Some sources had issues:\n- ${errors.join("\n- ")}\n` : ""}
 ### Preview (first 5 rows)
 ${preview}`
