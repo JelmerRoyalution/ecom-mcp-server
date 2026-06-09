@@ -15,6 +15,7 @@ import { join } from "node:path"
 import {
   type BrowserKey,
   detectInstalledBrowsers,
+  extractAmazonCookieHeader,
   extractFacebookSession,
   extractRedditCookieHeader,
 } from "../src/facebook/cookie-extractor"
@@ -50,10 +51,11 @@ function mergeEnv(updates: Record<string, string>): void {
 
 async function main(): Promise<void> {
   log("")
-  log("🛍️  E-commerce Research MCP - Facebook setup")
+  log("🛍️  E-commerce Research MCP - one-command setup")
   log("──────────────────────────────────────────────")
-  log("This connects your Facebook login so the scraper can read groups you're in.")
-  log("Make sure you're logged into Facebook in your normal browser first.")
+  log("This connects Reddit, Facebook, and Amazon from your browser so the scraper")
+  log("can read groups you're in and full Amazon review history.")
+  log("Make sure you're logged into Facebook (and Amazon) in your normal browser first.")
   log("")
 
   const requested = process.argv[2] as BrowserKey | undefined
@@ -83,13 +85,29 @@ async function main(): Promise<void> {
   } catch {
     // Best-effort; Reddit still works anonymously on many networks.
   }
+
+  // Borrow amazon.* cookies too, so the scraper can read full review history. Best-effort:
+  // logged-out Amazon only shows a handful of reviews; a login lets it page deeper.
+  try {
+    const amazonCookie = await extractAmazonCookieHeader({ browser: target, profile })
+    if (amazonCookie !== "") {
+      mergeEnv({ AMAZON_COOKIE: amazonCookie, AMAZON_ENGINE: "browser" })
+      log("• Amazon: ✓ connected (borrowed your browser login - can read full review history)")
+    } else {
+      log("• Amazon: reads public reviews without setup (log in to amazon.com for deeper history)")
+    }
+  } catch {
+    // Best-effort; Amazon's first review pages still work without a login.
+  }
   log("")
   log(`• Reading your Facebook login from ${target}… (a hidden browser may flash briefly)`)
 
   try {
     const { session, cookieNames } = await extractFacebookSession({ browser: target, profile })
-    mergeEnv({ FACEBOOK_COOKIE: session.cookieHeader, FACEBOOK_ENGINE: "browser" })
+    // The Meta Ad Library reuses the same facebook.com login, so wire it up at the same time.
+    mergeEnv({ FACEBOOK_COOKIE: session.cookieHeader, FACEBOOK_ENGINE: "browser", META_ADS_ENGINE: "browser" })
     log(`  ✓ Captured your Facebook session (${cookieNames.length} cookies) → saved to .env`)
+    log("• Meta Ad Library: ✓ ready (reuses your Facebook login - spy on competitor ads by their domain)")
     log("")
     log("✅ Done! The scraper is ready.")
     log("   Next: restart your MCP client (e.g. Claude Code), then try a tool like")

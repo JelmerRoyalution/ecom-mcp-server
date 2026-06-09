@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an e-commerce customer-research MCP (Model Context Protocol) server. It began as a Reddit MCP server and has been expanded to **also scrape public and private Facebook groups**, and to turn scraped discussions into **customer personas using Eugene Schwartz's "Breakthrough Advertising" framework**. It's built with TypeScript and uses FastMCP to expose Reddit, Facebook, and persona-building tools to AI assistants.
+This is an e-commerce customer-research MCP (Model Context Protocol) server. It began as a Reddit MCP server and has been expanded to **also scrape public and private Facebook groups**, **Amazon product reviews**, and the **Meta (Facebook/Instagram) Ad Library** (competitor ad spying), and to turn scraped discussions into **customer personas using Eugene Schwartz's "Breakthrough Advertising" framework**. It's built with TypeScript and uses FastMCP to expose Reddit, Facebook, Amazon, Meta-Ad-Library, and persona-building tools to AI assistants.
 
 > Note: the npm package is still named `reddit-mcp-server` (the published identity / `mcpName` is unchanged); the repository directory is `ecom-mcp-server` reflecting the broadened scope.
 
@@ -45,13 +45,33 @@ Scrape public and private Facebook groups/pages for customer-discussion research
 - `facebook_get_page_posts` - Scrape a public Facebook Page feed
 - `test_facebook_connection` - Report session/engine/Playwright status
 
+### Amazon Tools (Reviews Scraping)
+
+Scrape Amazon product reviews for customer-research. Amazon shows logged-out visitors only a handful of "featured" reviews; depth requires either an `AMAZON_COOKIE` session (logged-in, replayed via the optional Playwright browser engine - the same pattern as Facebook private groups) or a paid reviews API (`AMAZON_API_KEY`, provider Unwrangle/Rainforest). The free HTTP engine reads the first public pages best-effort and surfaces a clear "login wall" message when Amazon serves no review content. Accepts a bare 10-char ASIN or any Amazon product/review URL (marketplace auto-detected).
+
+- `amazon_search_products` - Search Amazon by niche/keyword → product cards (ASIN, title, rating) to feed into `amazon_get_product_reviews`. Best-effort: Amazon search is bot-protected logged-out, so most reliable with `AMAZON_COOKIE` + browser engine. Use when the user names a niche but no specific product.
+- `amazon_get_product_reviews` - Scrape a product's reviews (stars, title, body, verified-purchase, date, country, helpful votes) plus its rating summary; supports `sort`, `star_filter`, `verified_only`, `marketplace`
+- `amazon_get_product_info` - Product metadata + rating summary (average stars, total ratings, per-star distribution) without review bodies
+- `test_amazon_connection` - Report session/engine/API/Playwright status
+
+### Meta Ad Library Tools (Competitor Ad Spying)
+
+Scrape the **public** Meta (Facebook/Instagram) Ad Library - the capability behind ad-spy tools like Atria/Foreplay/Winning Hunter. The official Graph `ads_archive` API only covers political/issue ads, so this targets the same internal GraphQL endpoint (`facebook.com/api/graphql/`, `AdLibrarySearchPaginationQuery`) the public web UI calls, returning JSON (ad copy, headline, CTA, image/video URLs, landing page, page name, run-dates, active status, platforms). The Ad Library is public, so no login is required; a Facebook session only smooths anti-bot. Self-contained `src/meta-ads/` module; **JSON-first** (the browser engine intercepts the GraphQL response, the parser normalizes JSON - it does NOT scrape HTML). Standalone (no persona-pipeline integration).
+
+- `meta_ads_find_brands` - Discover advertisers. **Best input = a brand's bare domain** (e.g. `vitalityextracts.com`, no `https://`): a unique domain surfaces the brand's whole **connected page network** (main page + affiliate/advertorial pages). De-dupes ads into distinct advertiser cards ranked by ad volume. Niche keywords also work but are noisier.
+- `meta_ads_get_advertiser_ads` - Fetch an advertiser's ads (page id, Ad Library URL, or name/domain) with full copy/CTA/media. Filters: `media_type`, `active_status`, `platform`. Defaults to `sort=longest_running` - the strongest free "winning ad" signal (a long-running, heavily-duplicated creative is almost certainly profitable). The formatter leads each ad with `daysRunning` + `collationCount` (variant count).
+- `meta_ads_download_creatives` - Download an advertiser's creative **files** (static images and/or videos) to `<META_ADS_DOWNLOAD_DIR or 'meta-ads-creatives'>/<advertiser>/`, named by ad id. `src/meta-ads/downloader.ts` sniffs the real file type from magic bytes (Facebook's CDN mislabels types - e.g. serves PNGs as `image/jpeg`), paces requests, dedupes by URL, and caps at `max_files`. For **videos**, when the local whisper.cpp toolchain is present (`transcribe: auto`), it also transcribes each to a `<base>.txt` script plus a combined `<base>.script.md` (ad copy + spoken script) via `src/meta-ads/transcribe.ts`. Writes to local disk.
+- `test_meta_ads_connection` - Report session/engine/API/Playwright status
+
+**Engines** (`META_ADS_ENGINE`, three-tier like Amazon): `browser` (Playwright intercepts the GraphQL JSON - most robust, the default when Playwright is present, preferred even without a cookie); `http` (harvests `lsd`/`fb_dtsg`/`doc_id` from the page then POSTs `/api/graphql/` - brittle when Meta rotates `doc_id`); `api` (optional paid provider, ScrapeCreators, via `META_ADS_API_KEY`). By default the session **reuses `FACEBOOK_COOKIE`** (same `facebook.com` login), so `pnpm run setup` wires it up automatically. **Critical parser detail:** DCO/DPA/CAROUSEL ads carry `{{product.name}}`-style templates at the top level with the real creatives + media URLs in `snapshot.cards[]`, so the parser resolves the creative from `cards[]` in those cases.
+
 ### Customer Persona Tools (Schwartz "Breakthrough Advertising")
 
-Platform-agnostic - feed them text scraped from Reddit, Facebook, or both.
+Platform-agnostic - feed them text scraped from Reddit, Facebook, Amazon, or any mix.
 
 - `analyze_voice_of_customer` - Mine a corpus into pains, desires, objections, questions, emotional triggers, product mentions, recurring phrases, and verbatim quotes
-- `build_customer_persona` - Produce a persona brief organized by **mass desire**, the **5 awareness stages**, and the **5 market-sophistication levels**, with synthesis instructions for the LLM. Accepts raw `texts` and/or `facebook_group`/`subreddits` to auto-scrape **posts AND their comments** (via the shared `gatherVoiceRows` helper in `index.ts`).
-- `export_comments_csv` - Deep-scrape Facebook groups and/or subreddits to a **CSV**, one row per **post and comment**, linked by a shared `post_id` with a `row_type` of `post`/`comment`. Columns: `platform, source_url, post_id, post_url, row_type, author, timestamp, category, text` (ISO timestamps for Reddit; the rendered label for Facebook). Both tools share `gatherVoiceRows` (Facebook: `getGroupComments` feed→post→thread; Reddit: top posts→comments). Posts are always kept; comments are value-filtered via `isValuableComment` and tagged via `classifyComment`. CSV serialization in `src/utils/csv.ts`. Output files match `voice-of-customer-*.csv` and are git-ignored (may contain personal data).
+- `build_customer_persona` - Produce a persona brief organized by **mass desire**, the **5 awareness stages**, and the **5 market-sophistication levels**, with synthesis instructions for the LLM. Accepts raw `texts` and/or `facebook_group`/`subreddits`/`amazon_products` to auto-scrape **posts AND their comments**, and **products AND their reviews** (via the shared `gatherVoiceRows` helper in `index.ts`).
+- `export_comments_csv` - Deep-scrape Facebook groups, subreddits, and/or Amazon products to a **CSV**, one row per **post/product and comment/review**, linked by a shared `post_id` with a `row_type` of `post`/`comment`/`review` (Amazon `post_id` = ASIN). Columns: `platform, source_url, post_id, post_url, row_type, author, timestamp, upvotes, category, text` (ISO timestamps for Reddit; rendered labels for Facebook/Amazon). The **`upvotes`** column is the per-row crowd-validation signal - Reddit `score` (post+comment), Facebook reactions (`likeCount`), Amazon "found helpful" votes (`helpfulVotes`); blank when the platform exposed none (populated via the `votesCell` helper in `index.ts`). All three platforms share `gatherVoiceRows` (Facebook: `getGroupComments` feed→post→thread; Reddit: top posts→comments; Amazon: `getProductReviews` per ASIN). Posts/products are always kept; comments **and reviews** are value-filtered via `isValuableComment` and tagged via `classifyComment` (Amazon reviews additionally fall back to the star rating: ≤2★→pain, ≥4★→desire, via `classifyReview`). CSV serialization in `src/utils/csv.ts`. Output files match `voice-of-customer-*.csv` and are git-ignored (may contain personal data).
 
 ### Server Modes
 
@@ -125,13 +145,36 @@ pnpm lint:fix
    - `format.ts`: Markdown formatters for tool output.
    - `types.ts`: Facebook domain + config types.
 
-   **Onboarding:** `pnpm run setup` (script: `scripts/setup.ts`) detects the user's browser, extracts their Facebook session, and writes `FACEBOOK_COOKIE` + `FACEBOOK_ENGINE=browser` to `.env`. NB: `pnpm setup` (without `run`) is a reserved pnpm builtin - always use `pnpm run setup`.
+   **Onboarding:** `pnpm run setup` (script: `scripts/setup.ts`) detects the user's browser, extracts their Facebook session (and best-effort Reddit + Amazon cookies), and writes `FACEBOOK_COOKIE` + `FACEBOOK_ENGINE=browser` (plus `REDDIT_COOKIE`, `AMAZON_COOKIE`/`AMAZON_ENGINE=browser` when found) to `.env`. NB: `pnpm setup` (without `run`) is a reserved pnpm builtin - always use `pnpm run setup`.
 
-5. **Persona Module** (`src/persona/schwartz.ts`): Deterministic voice-of-customer text mining + the Schwartz "Breakthrough Advertising" structuring (awareness distribution, sophistication level, mass desire). **Extraction is deterministic here; synthesis is delegated to the calling LLM** via `buildPersonaBrief`. Platform-agnostic and fully unit-tested.
+5. **Amazon Module** (`src/amazon/`): Self-contained Amazon reviews scraping subsystem, mirroring the Facebook module's structure and conventions exactly:
+   - `amazon-client.ts`: Singleton client (`Either`/`Option` pattern) - three-tier engine selection (`api` if a key is set, else `browser` when a session + Playwright are present, else `http`), request pacing, response caching, ASIN/marketplace resolution, review **pagination** (walks `pageNumber` pages, capped at `AMAZON_MAX_REVIEW_PAGES`), and **star-filter fan-out**: Amazon caps each filtered view at ~100 reviews, so when depth is requested and no single star is pinned, `getProductReviews` loops a deliberate **5★/3★/1★ spread** (love / balanced / biggest-complaints - the most signal-rich for personas; 4★/2★ add mostly overlap) plus the default mixed view via `collectReviewWindow` and dedupes by review id (ceiling a few hundred/product - the same technique paid APIs use). A dry-streak guard bails early when Amazon serves the gated "limited selection" render that ignores the filter params. Methods: `getProductReviews`, `getProductInfo`, `searchProducts`.
+   - `engines.ts`: Pluggable fetch engines behind `AmazonFetchEngine`. `HttpFetchEngine` (native `fetch` against `/product-reviews/{ASIN}`) and `BrowserFetchEngine` (lazy-loads the optional `playwright` peer, replays an `AMAZON_COOKIE` session). `assertNotBlocked()` detects Amazon's "robot check"/CAPTCHA; `isPlaywrightAvailable()` gates `auto` selection.
+   - `api-engine.ts`: Optional paid reviews-API adapter (`fetchViaApi`) normalizing **Unwrangle** and **Rainforest** JSON into the domain types - the most reliable tier, bypassing anti-bot/login walls.
+   - `parsers.ts`: The single source of truth that turns Amazon review HTML into structured products/reviews via Cheerio, anchored on durable `data-hook` selectors (`review`, `review-body`, `review-star-rating`, `review-date`, `avp-badge`, `helpful-vote-statement`, `format-strip`) with tolerant fallbacks. Also `extractAsin` (all URL shapes + bare), `detectMarketplace`, `buildReviewsUrl`. **Fully unit-tested with fixtures.**
+   - `cookies.ts`: Parse/validate an Amazon cookie header (lenient: any recognizable session cookie like `session-id`/`at-main`).
+   - `format.ts`: Markdown formatters for tool output.
+   - `types.ts`: Amazon domain + config types.
 
-> **Imperative-boundary convention:** `parsers.ts`, `engines.ts`, and `schwartz.ts` carry an `eslint-disable` header for the functype style rules (same convention as `reddit-client.ts`/`response-cache.ts`) because DOM-walking, external IO, and lexicon scanning are inherently imperative.
+   > Reality check (validated live): logged-out `/product-reviews/` pages now contain **zero** review nodes - Amazon gates reviews behind a login wall, exactly like Facebook private groups. So depth needs `AMAZON_COOKIE` (browser engine) or `AMAZON_API_KEY`; the HTTP engine degrades gracefully with an actionable message. Amazon cookie auto-pickup reuses `cookie-extractor.ts`'s `extractAmazonCookieHeader` (macOS/Linux direct decryption of `%amazon.%` cookies).
 
-> **Optional Playwright peer:** `playwright` is NOT a hard dependency (keeps the base install light and avoids a Chromium download for Reddit-only users). It is lazy-loaded via an indirect dynamic import and marked `deps.neverBundle` in `tsdown.config.ts`. The Facebook tools degrade to the HTTP engine and give actionable install guidance when it's absent.
+6. **Meta Ad Library Module** (`src/meta-ads/`): Self-contained competitor-ad-spying subsystem. Mirrors the Facebook/Amazon module conventions (singleton `Either`/`Option` client, lazy Playwright peer, `ResponseCache`, pacing, `eslint-disable` imperative-boundary headers) with **one deliberate deviation: it is JSON-first, not HTML-first** - the Ad Library is a GraphQL SPA, so engines return intercepted JSON pages (not HTML) and `parsers.ts` normalizes JSON.
+   - `meta-ads-client.ts`: Singleton client. Three-tier engine selection (`api` if a key is set, else `browser` when Playwright is present - **even without a cookie, since the Ad Library is public** - else `http`). Methods `findBrands` (de-dupes ads into advertiser cards via `aggregateBrands`) and `getAdvertiserAds` (filter + sort, default `longest_running`).
+   - `engines.ts`: `MetaAdsFetchEngine` returns raw GraphQL pages via `fetchAdPages`. `BrowserFetchEngine` drives Chromium and **intercepts the XHR GraphQL responses** (`page.on("response")` on `/api/graphql/`) - the robust path, since Meta's own JS builds the tokens/`doc_id`. `HttpFetchEngine` harvests tokens then POSTs `/api/graphql/` directly (brittle). `isPlaywrightAvailable()` gates `auto`.
+   - `tokens.ts`: Harvest `lsd`/`fb_dtsg`/`jazoest`/spin params + the volatile `doc_id` from page HTML; build the GraphQL form body + `variables` (used only by the http engine).
+   - `parsers.ts`: The single source of truth that normalizes the GraphQL JSON into domain types. Defensively locates `search_results_connection`, walks `edges[].node.collated_results[]`, and **resolves the creative from `snapshot.cards[]` when `display_format` is DCO/DPA/CAROUSEL** (the top-level `body`/`title` are `{{…}}` templates there). Derives `daysRunning` from `start_date`, extracts media URLs, and `aggregateBrands` de-dupes by `page_id`. **Fully unit-tested with a real-shape fixture.**
+   - `api-engine.ts`: Optional paid Ad Library API adapter (`fetchViaApi`, ScrapeCreators) - reuses `normalizeAdNode` since providers return Meta's `snapshot` shape, with a flat fallback.
+   - `downloader.ts`: Filesystem boundary for `meta_ads_download_creatives` - fetches creative image/video files to disk with magic-byte file-type sniffing, pacing, URL dedupe and a `max_files` cap. Delegates video transcription to `transcribe.ts`.
+   - `transcribe.ts`: Optional LOCAL video transcription (no API key) via whisper.cpp + ffmpeg - `mp4 → 16kHz mono PCM wav (ffmpeg) → whisper-cli .txt`. Feature-detects the toolchain (prefers the native `/opt/homebrew` whisper-cli over the slow Rosetta PATH build), prefers the `small.en` model (the speed/quality sweet spot) among `~/.whisper-models` (override via `META_ADS_WHISPER_MODEL`), is idempotent (skips if the `.txt` exists), and degrades with install guidance when absent.
+   - `cookies.ts`: Lenient cookie parsing (the Ad Library is public, so a session is optional - any facebook.com cookie header is accepted). `format.ts`: Markdown formatters leading with the winning-ad signals. `types.ts`: domain + config types.
+
+   > Reality check (validated live, authenticated): the bare-domain search (`q=vitalityextracts.com`, `search_type=keyword_unordered`) returns ~370 tightly-relevant ads and surfaces the brand's **whole connected page network** (e.g. _Vitality Extracts Essential Oils_ + _Families For Wellness_ + _Hair Envy_). A generic word (`seed.com`) matches everywhere (>50k results), so a unique domain is the power query. The session **reuses `FACEBOOK_COOKIE`** by default (auto-pickup via `cookie-extractor.ts`'s `extractMetaAdsCookieHeader`, `%facebook.com`).
+
+7. **Persona Module** (`src/persona/schwartz.ts`): Deterministic voice-of-customer text mining + the Schwartz "Breakthrough Advertising" structuring (awareness distribution, sophistication level, mass desire). **Extraction is deterministic here; synthesis is delegated to the calling LLM** via `buildPersonaBrief`. Platform-agnostic and fully unit-tested.
+
+> **Imperative-boundary convention:** the Facebook, Amazon **and Meta Ad Library** `parsers.ts`/`engines.ts`/`api-engine.ts`/`tokens.ts`/`downloader.ts`/`transcribe.ts`/`*-client.ts`, plus `schwartz.ts`, carry an `eslint-disable` header for the functype style rules (same convention as `reddit-client.ts`/`response-cache.ts`) because DOM/JSON-walking, external IO, and lexicon scanning are inherently imperative.
+
+> **Optional Playwright peer:** `playwright` is NOT a hard dependency (keeps the base install light and avoids a Chromium download for Reddit-only users). It is lazy-loaded via an indirect dynamic import and marked `deps.neverBundle` in `tsdown.config.ts`. The Facebook, Amazon **and Meta Ad Library** tools degrade to the HTTP engine and give actionable install guidance when it's absent.
 
 ### Authentication Flow
 
@@ -226,6 +269,39 @@ FACEBOOK_ENGINE=auto             # auto (default), http, browser (Playwright)
 # FACEBOOK_USER_AGENT=           # Override the User-Agent
 # FACEBOOK_CACHE=on              # In-memory response cache (on/off)
 # FACEBOOK_CACHE_MAX_MB=50       # Cache size cap in MB
+
+# Amazon (product reviews scraping)
+# EASIEST: run `pnpm run setup` to auto-fill AMAZON_COOKIE from your browser (macOS/Linux).
+AMAZON_COOKIE=                   # Full Cookie header from a logged-in amazon.com browser; lets the scraper page deeper into review history
+# AMAZON_COOKIE_FROM=chrome      # Auto-read amazon cookies at startup: chrome|brave|edge|arc|chromium|vivaldi|opera
+# AMAZON_COOKIE_FROM_PROFILE=Default
+AMAZON_ENGINE=auto               # auto (default), http, browser (Playwright), api (paid reviews API)
+# AMAZON_API_KEY=                # Paid reviews API key (most reliable path; bypasses anti-bot + login walls)
+# AMAZON_API_PROVIDER=unwrangle  # unwrangle (default) or rainforest
+# AMAZON_MARKETPLACE=com         # Default marketplace TLD when only an ASIN is given (com, co.uk, de, …)
+# AMAZON_MIN_DELAY_MS=3000       # Min delay between Amazon requests (anti-bot pacing)
+# AMAZON_MAX_REVIEW_PAGES=10     # Hard cap on review pages fetched per product (~10 reviews/page)
+# AMAZON_HEADLESS=true           # Run browser engine headless (true/false)
+# AMAZON_LOCALE=en_US            # Preferred locale
+# AMAZON_USER_AGENT=             # Override the User-Agent
+# AMAZON_CACHE=on                # In-memory response cache (on/off)
+# AMAZON_CACHE_MAX_MB=50         # Cache size cap in MB
+
+# Meta Ad Library (competitor ad spying)
+# The Ad Library is PUBLIC, so no login is needed; by default this reuses FACEBOOK_COOKIE above.
+# META_ADS_COOKIE=               # Optional separate facebook.com Cookie header (else reuses FACEBOOK_COOKIE)
+# META_ADS_COOKIE_FROM=chrome    # Auto-read facebook.com cookies: chrome|brave|edge|arc|chromium|vivaldi|opera
+META_ADS_ENGINE=auto             # auto (default), http, browser (Playwright - most robust), api (paid provider)
+# META_ADS_COUNTRY=US            # Default Ad Library country (ISO code, or ALL)
+# META_ADS_API_KEY=              # Optional paid provider key (ScrapeCreators) - reliable at scale
+# META_ADS_API_PROVIDER=scrapecreators
+# META_ADS_MIN_DELAY_MS=5000     # Min delay between requests (anti-bot pacing)
+# META_ADS_MAX_PAGES=10          # Cap on result pages fetched per query (~30 ads/page)
+# META_ADS_HEADLESS=true         # Run the browser engine headless (true/false)
+# META_ADS_LOCALE=en_US          # Preferred locale
+# META_ADS_USER_AGENT=           # Override the User-Agent
+# META_ADS_CACHE=on              # In-memory response cache (on/off)
+# META_ADS_CACHE_MAX_MB=50       # Cache size cap in MB
 
 # Transport Configuration
 # TRANSPORT_TYPE=stdio            # Uncomment for stdio mode (default: httpStream for node, stdio for npx/bin)

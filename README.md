@@ -2,7 +2,7 @@
 
 # 🛒 Ecom Customer Research MCP
 
-### Turn real conversations from **Reddit** & **Facebook groups** into **customer personas** - automatically.
+### Turn real conversations from **Reddit**, **Facebook groups** & **Amazon reviews** into **customer personas** - automatically.
 
 _Listen to your market in their own words. Understand what they really want. Sell with copy that converts._
 
@@ -14,6 +14,8 @@ _Listen to your market in their own words. Understand what they really want. Sel
 
 ![Reddit](https://img.shields.io/badge/Reddit-FF4500?logo=reddit&logoColor=white)
 ![Facebook](https://img.shields.io/badge/Facebook%20Groups-1877F2?logo=facebook&logoColor=white)
+![Amazon](https://img.shields.io/badge/Amazon%20Reviews-FF9900?logo=amazon&logoColor=white)
+![Meta Ad Library](https://img.shields.io/badge/Meta%20Ad%20Library-0668E1?logo=meta&logoColor=white)
 ![Chrome](https://img.shields.io/badge/Chrome-4285F4?logo=googlechrome&logoColor=white)
 ![Brave](https://img.shields.io/badge/Brave-FB542B?logo=brave&logoColor=white)
 ![Edge](https://img.shields.io/badge/Edge-0078D7?logo=microsoftedge&logoColor=white)
@@ -29,12 +31,12 @@ _Listen to your market in their own words. Understand what they really want. Sel
 
 # 👉 Start Here (read this first)
 
-**What this does:** it reads the conversations inside your Facebook groups (and Reddit) and turns them into a ready-to-use **customer persona** for your product - written in your customers' own words.
+**What this does:** it reads the conversations inside your Facebook groups, Reddit, and **Amazon product reviews**, and turns them into a ready-to-use **customer persona** for your product - written in your customers' own words.
 
 **How it gets into Facebook:** it simply **borrows the Facebook login you already have open in your browser**. It never asks for your password.
 
 > [!TIP]
-> **Two sources, no Reddit account needed.** 👽 `pnpm run setup` connects **Reddit** too (it borrows your browser's reddit.com cookies, which gets past Reddit's bot-block - no login or app required). Then just say _"Scrape r/SkincareAddiction and list the 5 biggest customer pains."_ The big setup below is for 📘 **Facebook**, so it can read groups with your own login.
+> **Three sources, no extra accounts needed.** 👽 `pnpm run setup` connects **Reddit** (it borrows your browser's reddit.com cookies, which gets past Reddit's bot-block - no login or app required) **and 🛒 Amazon** (it borrows your amazon.com login so it can read a product's full review history). Then just say _"Scrape r/SkincareAddiction and list the 5 biggest customer pains,"_ or _"Read the reviews for this Amazon product and tell me the top complaints."_ The big setup below is for 📘 **Facebook**, so it can read groups with your own login.
 
 > [!IMPORTANT]
 >
@@ -152,9 +154,39 @@ Just chat with Claude in normal language. **Reddit works instantly; Facebook use
  and tell me the 5 biggest pains and the exact words people use."
 ```
 
+**🛒 Amazon reviews:**
+
+```text
+"Scrape Amazon reviews for magnesium glycinate products - find the top sellers,
+ then pull their reviews and tell me the 5 biggest complaints and what people love."
+```
+
+```text
+"Read the reviews for this Amazon product and list the top 5 complaints
+ and the top 5 things people love: https://www.amazon.com/dp/B0XXXXXXXX"
+```
+
+```text
+"Scrape the 1- and 2-star reviews for ASIN B0XXXXXXXX and tell me, in customers'
+ own words, why people return it."
+```
+
+**🕵️ Meta Ad Library (competitor ad spying):**
+
+```text
+"Find every brand page running ads to vitalityextracts.com, then pull their
+ longest-running video ads and summarize the angles and hooks they use."
+```
+
+```text
+"Spy on my competitor seed.com in the Meta Ad Library - which of their ads have
+ been running the longest, and what's the offer/CTA on each?"
+```
+
 ```text
 "Pull the hottest threads from r/SkincareAddiction and r/30PlusSkinCare,
- then combine them with my Facebook group data into one persona."
+ then combine them with my Facebook group data AND my competitor's Amazon reviews
+ into one persona."
 ```
 
 ```text
@@ -175,9 +207,13 @@ flowchart LR
     ENV --> S{{"🛒 Ecom Research<br/>MCP Server"}}
     R["👽 Reddit<br/>subreddits & comments"] --> S
     F["📘 Facebook<br/>public & private groups"] --> S
+    A["🛒 Amazon<br/>product reviews"] --> S
+    M["🕵️ Meta Ad Library<br/>competitor ads"] --> S
     S --> V["🗣️ Voice of Customer<br/>pains · desires · objections · quotes"]
+    S --> W["🏆 Winning competitor ads<br/>copy · hooks · longest-running"]
     V --> P["📋 Customer Persona<br/>Schwartz Breakthrough Advertising"]
     P --> C["✍️ Copy, ads & offers<br/>that actually resonate"]
+    W --> C
 ```
 
 ## 🤝 Which Claude can run it?
@@ -195,7 +231,7 @@ It's a standard MCP server, so it plugs into any Claude that supports MCP:
 
 ## 🛠️ What's inside
 
-Three toolsets your Claude can use:
+Four toolsets your Claude can use:
 
 ### 👽 Reddit tools · _no login, works instantly_
 
@@ -223,15 +259,37 @@ Three toolsets your Claude can use:
 | `facebook_get_page_posts`    | Scrape a public **Page** feed (e.g. a competitor)           |
 | `test_facebook_connection`   | Check your login / engine status                            |
 
-### 🎯 Customer-persona tools (Schwartz _Breakthrough Advertising_) · _Reddit, Facebook, or both_
+### 🛒 Amazon tools · _your own product or a competitor's_
 
-| Tool                        | What it does                                                                                                                                                                                                                                                              |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `analyze_voice_of_customer` | Mine any text into **pains, desires, objections, questions, triggers, quotes**                                                                                                                                                                                            |
-| `build_customer_persona`    | Build a full persona brief from **posts + their comments**: **mass desire**, the **5 awareness stages**, the **5 sophistication levels**, and headline angles                                                                                                             |
-| `export_comments_csv`       | Scrape Facebook groups and/or subreddits to a **CSV** - one row per **post and comment**, linked by a shared `post_id` (+ `row_type`), with author, timestamp, category and text. Sort by `post_id` to see each post with its comments. Low-value reactions filtered out. |
+| Tool                         | What it does                                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `amazon_search_products`     | **Search a niche** (e.g. "magnesium glycinate") → a list of products + ASINs to scrape               |
+| `amazon_get_product_reviews` | Scrape **customer reviews** for any product (by ASIN or link): stars, title, body, verified, helpful |
+| `amazon_get_product_info`    | Product title, brand, **average stars, total ratings**, and the per-star split                       |
+| `test_amazon_connection`     | Check your Amazon login / engine / reviews-API status                                                |
 
-> 💡 Mix sources freely - combine Reddit threads and Facebook group discussions into one persona or one CSV.
+> 🛒 **Getting Amazon reviews:** Amazon shows logged-out visitors only a handful of reviews. For the full history, `pnpm run setup` borrows your **amazon.com login** automatically - or, for hands-off reliability at scale, add an `AMAZON_API_KEY` (Unwrangle or Rainforest reviews API). See **Advanced configuration** below.
+
+### 🕵️ Meta Ad Library tools · _spy on any competitor's Facebook & Instagram ads_
+
+| Tool                          | What it does                                                                                                                                                                            |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `meta_ads_find_brands`        | **Find a brand's ad accounts by its domain** (e.g. `vitalityextracts.com`) - surfaces the main page **plus** its affiliate/advertorial pages                                            |
+| `meta_ads_get_advertiser_ads` | Pull an advertiser's **live ads** - copy, headline, CTA, landing page, media - filtered by type, **sorted by longest-running (the winners)**                                            |
+| `meta_ads_download_creatives` | **Download a competitor's creative files** (static images and/or videos) to a local folder - and for videos, **transcribe the spoken script** (local whisper.cpp) alongside the ad copy |
+| `test_meta_ads_connection`    | Check your Meta Ad Library login / engine / API status                                                                                                                                  |
+
+> 🕵️ **The pro move:** search a competitor's **bare domain** (just `theirbrand.com`, no `https://`). Because the domain is unique, it reveals every Facebook page running ads to that site - including the sneaky advertorial pages brands hide behind. Then sort by **longest-running**: an ad that's been live for months is almost certainly making money. It's **public data** and needs no extra login (it reuses your Facebook one). For hands-off scale, add a `META_ADS_API_KEY` (ScrapeCreators). See **Advanced configuration**.
+
+### 🎯 Customer-persona tools (Schwartz _Breakthrough Advertising_) · _Reddit, Facebook, Amazon, or any mix_
+
+| Tool                        | What it does                                                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `analyze_voice_of_customer` | Mine any text into **pains, desires, objections, questions, triggers, quotes**                                                                                                                                                                                                                                                                                                                             |
+| `build_customer_persona`    | Build a full persona brief from **posts + comments + Amazon reviews**: **mass desire**, the **5 awareness stages**, the **5 sophistication levels**, and headline angles                                                                                                                                                                                                                                   |
+| `export_comments_csv`       | Scrape Facebook groups, subreddits, and/or Amazon products to a **CSV** - one row per **post/product and comment/review**, linked by a shared `post_id` (+ `row_type`), with author, timestamp, **`upvotes`** (Reddit score / Facebook reactions / Amazon "found helpful"), category and text. Sort by `upvotes` to rank by social proof, or by `post_id` to group them. Low-value reactions filtered out. |
+
+> 💡 Mix sources freely - combine Reddit threads, Facebook group discussions, and Amazon reviews into one persona or one CSV.
 
 ## 🧠 The framework: why "personas," done right
 
@@ -266,6 +324,56 @@ The easiest path is `pnpm run setup`. Under the hood it fills these in `.env`:
 | `FACEBOOK_CACHE` / `FACEBOOK_CACHE_MAX_MB` | In-memory response cache (default `on` / `50`).                                                                              |
 
 **How cookie auto-pickup works:** the tool reads your browser's local cookie database and lets the browser (or your OS keychain) decrypt it - so you never copy-paste secrets. Cross-platform (macOS Keychain / Windows DPAPI / Linux).
+
+</details>
+
+<details>
+<summary><b>🛒 Amazon reviews options</b></summary>
+
+Amazon shows logged-out visitors only a handful of "featured" reviews. There are three ways to read more, in order of effort:
+
+1. **Nothing** - the lightweight engine reads the first public reviews of many products. Good for a quick look.
+2. **Your Amazon login** (recommended, free) - `pnpm run setup` borrows your amazon.com login from your browser so it can page through a product's full review history. (On macOS/Linux it's automatic; on Windows, paste `AMAZON_COOKIE` manually.)
+3. **A reviews API** (most reliable, paid) - set `AMAZON_API_KEY` and the tool routes through a provider that handles anti-bot, CAPTCHAs and pagination for you.
+
+| Variable                               | Description                                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `AMAZON_COOKIE`                        | Full cookie header from a logged-in amazon.com browser (set automatically by `pnpm run setup`).        |
+| `AMAZON_COOKIE_FROM`                   | Auto-read your Amazon login from a browser **on every start**: `chrome` · `brave` · `edge` · `arc` · … |
+| `AMAZON_ENGINE`                        | `auto` (default) · `http` (lightweight) · `browser` (Playwright) · `api` (paid reviews API).           |
+| `AMAZON_API_KEY`                       | API key for a reviews API. Set this to use the most reliable path.                                     |
+| `AMAZON_API_PROVIDER`                  | Which API the key belongs to: `unwrangle` (default) or `rainforest`.                                   |
+| `AMAZON_MARKETPLACE`                   | Default marketplace when you pass only an ASIN: `com` (default), `co.uk`, `de`, `ca`, `fr`, …          |
+| `AMAZON_MIN_DELAY_MS`                  | Delay between requests to stay friendly to Amazon (default `3000`).                                    |
+| `AMAZON_CACHE` / `AMAZON_CACHE_MAX_MB` | In-memory response cache (default `on` / `50`).                                                        |
+
+> You can pass a plain **ASIN** (the 10-character code like `B0XXXXXXXX` in any Amazon link) or a full **product/review URL** - the tool figures out the rest, including which country's store it's from.
+
+</details>
+
+<details>
+<summary><b>🕵️ Meta Ad Library options</b></summary>
+
+The Ad Library is a **public** transparency tool, so this works with **no extra login** - it reuses the Facebook login `pnpm run setup` already captured. The most reliable engine is the Playwright **browser** engine (it lets Meta's own page build the request and just reads back the result); the lightweight **http** engine is a best-effort fallback. For hands-off reliability at scale, a paid provider handles proxies and Meta's rotating tokens for you.
+
+1. **Nothing extra** (recommended) - after `pnpm run setup` it reuses your Facebook login + the browser engine. Search a competitor's bare domain and go.
+2. **A paid API** (most reliable, paid) - set `META_ADS_API_KEY` (ScrapeCreators) to route through a managed provider.
+
+| Variable                                   | Description                                                                                                  |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `META_ADS_COOKIE`                          | Optional separate facebook.com cookie header. By default it **reuses `FACEBOOK_COOKIE`** - usually unneeded. |
+| `META_ADS_COOKIE_FROM`                     | Auto-read facebook.com cookies from a browser **on every start**: `chrome` · `brave` · `edge` · …            |
+| `META_ADS_ENGINE`                          | `auto` (default) · `http` (lightweight, brittle) · `browser` (Playwright - most robust) · `api` (paid).      |
+| `META_ADS_COUNTRY`                         | Default Ad Library country as an ISO code: `US` (default), `GB`, `DE`, … or `ALL`.                           |
+| `META_ADS_API_KEY`                         | API key for a paid Ad Library provider (ScrapeCreators). Set this for hands-off reliability at scale.        |
+| `META_ADS_MAX_PAGES`                       | Cap on result pages per query (~30 ads/page, default `10`).                                                  |
+| `META_ADS_MIN_DELAY_MS`                    | Delay between requests to stay friendly to Meta (default `5000`).                                            |
+| `META_ADS_CACHE` / `META_ADS_CACHE_MAX_MB` | In-memory response cache (default `on` / `50`).                                                              |
+| `META_ADS_WHISPER_MODEL`                   | Path to a whisper.cpp model for **video transcription** (else the best one in `~/.whisper-models`).          |
+
+> **Video transcription (optional, free, local).** When you download video creatives, the tool can transcribe the spoken **script** alongside the ad copy - no API key, runs offline. One-time setup: `brew install ffmpeg whisper-cpp`, then grab a model: `mkdir -p ~/.whisper-models && curl -L -o ~/.whisper-models/ggml-base.en.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin`. After that, downloading videos auto-writes a `.txt` script + a combined `.script.md` (ad copy + spoken script). If it's not installed, videos still download and you get a note on what to install.
+
+> The official Facebook Ad Library **API** only covers political/issue ads - useless for e-commerce. This reads the same **public web Ad Library** that shows all commercial ads, which is exactly what spy tools like Foreplay and Winning Hunter do. You're responsible for using it within Meta's terms.
 
 </details>
 
@@ -334,9 +442,9 @@ TRANSPORT_TYPE=httpStream PORT=3000 node dist/index.js
 > [!WARNING]
 > This tool is for **aggregate customer research** - understanding a market, not individuals.
 
-- Only access groups you're **legitimately a member of**.
-- Don't de-anonymize people or republish their posts verbatim as your own.
-- Scraping may conflict with a platform's Terms of Service - use responsibly and at your own discretion.
+- Only access groups you're **legitimately a member of**, and use your **own** Amazon login for any review scraping.
+- Don't de-anonymize people or republish their posts, comments, or reviews verbatim as your own.
+- Scraping may conflict with a platform's Terms of Service (including Amazon's) - use responsibly and at your own discretion.
 - Reddit data must not be used for AI training or resale (per Reddit's Responsible Builder Policy).
 
 ## 🧑‍💻 For developers
@@ -344,24 +452,24 @@ TRANSPORT_TYPE=httpStream PORT=3000 node dist/index.js
 <details>
 <summary><b>Stack &amp; commands</b></summary>
 
-TypeScript · [FastMCP](https://github.com/punkpeye/fastmcp) · Playwright (Facebook browser engine) · Cheerio (HTML parsing) · functype · Zod · Vitest.
+TypeScript · [FastMCP](https://github.com/punkpeye/fastmcp) · Playwright (Facebook/Amazon browser engine) · Cheerio (HTML parsing) · functype · Zod · Vitest.
 
 ```bash
 pnpm install        # install deps
-pnpm run setup      # connect your Facebook login
+pnpm run setup      # connect your Facebook + Amazon logins
 pnpm build          # build
 pnpm test           # run tests
 pnpm validate       # format + lint + typecheck + test + build
 pnpm serve:dev      # run from source (tsx)
 ```
 
-**Architecture:** `src/facebook/` (client, engines, parsers, cookie-extractor, formatters) · `src/persona/schwartz.ts` (voice-of-customer mining + framework) · `src/client/` (Reddit) · `src/index.ts` (MCP tools). See `CLAUDE.md` for the full map.
+**Architecture:** `src/facebook/` (client, engines, parsers, cookie-extractor, formatters) · `src/amazon/` (client, HTTP/browser/API engines, review parsers, formatters) · `src/persona/schwartz.ts` (voice-of-customer mining + framework) · `src/client/` (Reddit) · `src/index.ts` (MCP tools). See `CLAUDE.md` for the full map.
 
 </details>
 
 ## 🙏 Credits
 
-Built on top of [reddit-mcp-server](https://github.com/jordanburke/reddit-mcp-server) by Jordan Burke. Facebook group scraping, the multi-browser cookie auto-setup, and the Schwartz persona engine are additions in this fork.
+Built on top of [reddit-mcp-server](https://github.com/jordanburke/reddit-mcp-server) by Jordan Burke. Facebook group scraping, Amazon review scraping, the multi-browser cookie auto-setup, and the Schwartz persona engine are additions in this fork.
 
 Persona methodology: _Breakthrough Advertising_ by Eugene M. Schwartz.
 

@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.jordanburke/reddit-mcp-server",
-  "description": "E-commerce research MCP: scrape Reddit + Facebook groups (public & private), full Reddit read/write, and build Schwartz customer personas.",
+  "description": "E-commerce research MCP: scrape Reddit, Facebook groups (public & private), and Amazon product reviews, full Reddit read/write, and build Schwartz customer personas.",
   "repository": {
     "url": "https://github.com/jordanburke/reddit-mcp-server",
     "source": "github"
   },
-  "version": "1.5.0",
+  "version": "1.6.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "reddit-mcp-server",
-      "version": "1.5.0",
+      "version": "1.6.0",
       "transport": {
         "type": "stdio"
       },
@@ -96,6 +96,76 @@
         {
           "name": "FACEBOOK_HEADLESS",
           "description": "Run the Playwright browser engine headless: true (default) or false",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "AMAZON_COOKIE",
+          "description": "Full Cookie header from a logged-in amazon.com browser. Optional - lets the scraper page deeper into a product's full review history (logged-out only sees a handful).",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "AMAZON_ENGINE",
+          "description": "Amazon scraping engine: auto (default), http (lightweight), browser (Playwright), or api (paid reviews API)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "AMAZON_API_KEY",
+          "description": "API key for a paid Amazon reviews API (Unwrangle or Rainforest). The most reliable path; bypasses anti-bot and login walls.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "AMAZON_API_PROVIDER",
+          "description": "Which reviews API the AMAZON_API_KEY belongs to: unwrangle (default) or rainforest",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "AMAZON_MARKETPLACE",
+          "description": "Default Amazon marketplace TLD when only an ASIN is given: com (default), co.uk, de, ca, fr, etc.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "AMAZON_MIN_DELAY_MS",
+          "description": "Minimum delay in ms between Amazon requests (anti-bot pacing, default 3000)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "META_ADS_COOKIE",
+          "description": "Optional facebook.com Cookie header for the Meta Ad Library. Not required (the Ad Library is public); by default it reuses FACEBOOK_COOKIE. A session only smooths anti-bot.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "META_ADS_ENGINE",
+          "description": "Meta Ad Library engine: auto (default), http (lightweight, brittle), browser (Playwright - most robust), or api (paid provider)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "META_ADS_API_KEY",
+          "description": "Optional paid Ad Library API key (ScrapeCreators). The most reliable path at scale; handles proxies and token rotation.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "META_ADS_COUNTRY",
+          "description": "Default Ad Library country as an ISO code (US default), or ALL",
           "isRequired": false,
           "format": "string",
           "isSecret": false

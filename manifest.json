@@ -1,10 +1,10 @@
 {
   "manifest_version": "0.2",
   "name": "reddit-mcp-server",
-  "display_name": "Reddit + Facebook Customer Research MCP",
-  "version": "1.5.0",
-  "description": "Scrape Reddit and Facebook groups (public & private) and build Schwartz 'Breakthrough Advertising' customer personas - directly from Claude.",
-  "long_description": "An e-commerce customer-research MCP server. It scrapes real customer discussions from Reddit AND Facebook groups, then turns them into customer personas using Eugene Schwartz's 'Breakthrough Advertising' framework.\n\n**Reddit (read + write):**\n- Browse/search any subreddit, fetch posts with threaded comments\n- User profiles, trending subreddits\n- Create, reply, edit, delete (with credentials) + Safe Mode spam protection\n\n**Facebook (scraping):**\n- Scrape posts from PUBLIC and PRIVATE Facebook groups (private groups need a logged-in session cookie from a member)\n- Scrape comment threads from posts\n- Group metadata, group search, public Page feeds\n- Lightweight HTTP engine by default; optional Playwright browser engine for private groups and full comment threads\n\n**Customer personas (Schwartz framework):**\n- Mine discussions into voice-of-customer buckets: pains, desires, objections, questions, emotional triggers, verbatim quotes\n- Build a persona brief organized by mass desire, the 5 awareness stages, and the 5 market-sophistication levels\n- Works on Reddit, Facebook, or both\n\n**Perfect for:**\n- E-commerce brands and DTC marketers\n- Customer/audience research and ad copywriting\n- Market and competitor analysis",
+  "display_name": "Reddit + Facebook + Amazon Customer Research MCP",
+  "version": "1.6.0",
+  "description": "Scrape Reddit, Facebook groups (public & private), and Amazon product reviews, and build Schwartz 'Breakthrough Advertising' customer personas - directly from Claude.",
+  "long_description": "An e-commerce customer-research MCP server. It scrapes real customer discussions from Reddit, Facebook groups, AND Amazon product reviews, then turns them into customer personas using Eugene Schwartz's 'Breakthrough Advertising' framework.\n\n**Reddit (read + write):**\n- Browse/search any subreddit, fetch posts with threaded comments\n- User profiles, trending subreddits\n- Create, reply, edit, delete (with credentials) + Safe Mode spam protection\n\n**Facebook (scraping):**\n- Scrape posts from PUBLIC and PRIVATE Facebook groups (private groups need a logged-in session cookie from a member)\n- Scrape comment threads from posts\n- Group metadata, group search, public Page feeds\n- Lightweight HTTP engine by default; optional Playwright browser engine for private groups and full comment threads\n\n**Amazon (reviews scraping):**\n- Scrape customer reviews for any product by ASIN or product URL (stars, title, body, verified-purchase, date, helpful votes)\n- Product metadata + rating summary (average stars, total ratings, per-star split)\n- Free HTTP engine reads the first public pages; for full review history set AMAZON_COOKIE (logged-in session) or AMAZON_API_KEY (Unwrangle/Rainforest reviews API)\n\n**Customer personas (Schwartz framework):**\n- Mine discussions into voice-of-customer buckets: pains, desires, objections, questions, emotional triggers, verbatim quotes\n- Build a persona brief organized by mass desire, the 5 awareness stages, and the 5 market-sophistication levels\n- Works on Reddit, Facebook, Amazon, or any mix\n\n**Perfect for:**\n- E-commerce brands and DTC marketers\n- Customer/audience research and ad copywriting\n- Market and competitor analysis",
   "author": {
     "name": "Jordan Burke",
     "email": "jordan.burke@gmail.com",
@@ -32,7 +32,12 @@
         "FACEBOOK_COOKIE": "${user_config.facebook_cookie}",
         "FACEBOOK_ENGINE": "${user_config.facebook_engine}",
         "FACEBOOK_MIN_DELAY_MS": "${user_config.facebook_min_delay_ms}",
-        "FACEBOOK_HEADLESS": "${user_config.facebook_headless}"
+        "FACEBOOK_HEADLESS": "${user_config.facebook_headless}",
+        "AMAZON_COOKIE": "${user_config.amazon_cookie}",
+        "AMAZON_ENGINE": "${user_config.amazon_engine}",
+        "AMAZON_API_KEY": "${user_config.amazon_api_key}",
+        "AMAZON_API_PROVIDER": "${user_config.amazon_api_provider}",
+        "AMAZON_MARKETPLACE": "${user_config.amazon_marketplace}"
       }
     }
   },
@@ -118,6 +123,22 @@
       "description": "Scrape posts from a public Facebook Page feed"
     },
     {
+      "name": "amazon_search_products",
+      "description": "Search Amazon for products by niche/keyword (returns ASINs)"
+    },
+    {
+      "name": "amazon_get_product_reviews",
+      "description": "Scrape customer reviews for an Amazon product by ASIN or URL"
+    },
+    {
+      "name": "amazon_get_product_info",
+      "description": "Get an Amazon product's metadata and rating summary"
+    },
+    {
+      "name": "test_amazon_connection",
+      "description": "Check Amazon session, engine, API, and Playwright availability"
+    },
+    {
       "name": "analyze_voice_of_customer",
       "description": "Mine discussions into pains, desires, objections, and quotes"
     },
@@ -132,12 +153,35 @@
     {
       "name": "test_facebook_connection",
       "description": "Check Facebook session, engine, and Playwright availability"
+    },
+    {
+      "name": "meta_ads_find_brands",
+      "description": "Find a brand's Meta Ad Library advertiser pages by its bare domain (surfaces the connected page network)"
+    },
+    {
+      "name": "meta_ads_get_advertiser_ads",
+      "description": "Fetch an advertiser's Meta ads (copy, CTA, media) filtered by type, sorted by longest-running winners"
+    },
+    {
+      "name": "meta_ads_download_creatives",
+      "description": "Download an advertiser's ad creative files (static images and/or videos) from the Meta Ad Library to a local folder"
+    },
+    {
+      "name": "test_meta_ads_connection",
+      "description": "Check Meta Ad Library session, engine, API, and Playwright availability"
     }
   ],
   "keywords": [
     "reddit",
     "facebook",
     "facebook-groups",
+    "amazon",
+    "amazon-reviews",
+    "product-reviews",
+    "meta-ad-library",
+    "facebook-ads",
+    "ad-spy",
+    "competitor-research",
     "social-media",
     "api",
     "mcp",
@@ -226,6 +270,41 @@
       "type": "string",
       "title": "Facebook Headless Browser",
       "description": "Run the Playwright browser engine headless: true (default) or false",
+      "required": false,
+      "sensitive": false
+    },
+    "amazon_cookie": {
+      "type": "string",
+      "title": "Amazon Cookie",
+      "description": "Full Cookie header from a logged-in amazon.com browser. Optional - lets the scraper read a product's full review history (logged-out only sees a handful).",
+      "required": false,
+      "sensitive": true
+    },
+    "amazon_engine": {
+      "type": "string",
+      "title": "Amazon Engine",
+      "description": "Scraping engine: auto (default), http (lightweight), browser (Playwright), or api (paid reviews API)",
+      "required": false,
+      "sensitive": false
+    },
+    "amazon_api_key": {
+      "type": "string",
+      "title": "Amazon Reviews API Key",
+      "description": "API key for a paid Amazon reviews API (Unwrangle or Rainforest). The most reliable path - bypasses anti-bot and login walls.",
+      "required": false,
+      "sensitive": true
+    },
+    "amazon_api_provider": {
+      "type": "string",
+      "title": "Amazon Reviews API Provider",
+      "description": "Which provider the API key belongs to: unwrangle (default) or rainforest",
+      "required": false,
+      "sensitive": false
+    },
+    "amazon_marketplace": {
+      "type": "string",
+      "title": "Amazon Marketplace",
+      "description": "Default marketplace TLD when only an ASIN is given: com (default), co.uk, de, ca, fr, etc.",
       "required": false,
       "sensitive": false
     }

@@ -21,3 +21,8 @@ bundle-temp/
 voice-of-customer-*.csv
 voc-*.csv
 exports/
+
+# Scraped competitor research output (ad copy etc.) - keep local
+research/
+meta-ads-creatives/
+.DS_Store

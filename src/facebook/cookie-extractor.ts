@@ -382,14 +382,12 @@ export async function extractFacebookSession(
 }
 
 /**
- * Best-effort: read reddit.com cookies from a locally-installed browser and return them as a
- * Cookie header. Sending these (even anonymous) cookies makes Reddit's JSON API serve requests
- * that would otherwise be 403-blocked from the network. Returns "" when nothing is available.
- *
- * Uses macOS/Linux direct decryption (the common case); on Windows it returns "" and callers
- * fall back to OAuth. No Reddit login is required - any reddit.com cookies suffice.
+ * Best-effort: read cookies for a host suffix from a locally-installed browser and return them
+ * as a Cookie header (macOS/Linux direct decryption). Returns "" on Windows or when nothing is
+ * available. Shared by the Reddit and Amazon helpers below.
  */
-export async function extractRedditCookieHeader(
+async function extractCookieHeaderForHost(
+  hostSuffix: string,
   opts: { readonly browser?: BrowserKey; readonly profile?: string } = {},
 ): Promise<string> {
   if (isWin) {
@@ -414,7 +412,7 @@ export async function extractRedditCookieHeader(
     const { dir, file } = copyCookieDb(dbPath)
     try {
       const SEP = "|::|"
-      const sql = `SELECT host_key || '${SEP}' || name || '${SEP}' || quote(encrypted_value) FROM cookies WHERE host_key LIKE '%reddit.com'`
+      const sql = `SELECT host_key || '${SEP}' || name || '${SEP}' || quote(encrypted_value) FROM cookies WHERE host_key LIKE '${hostSuffix}'`
       const raw = execFileSync("sqlite3", [file, sql], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 })
       const byName = new Map<string, string>()
       for (const line of raw.split("\n")) {
@@ -440,4 +438,42 @@ export async function extractRedditCookieHeader(
   } catch {
     return ""
   }
+}
+
+/**
+ * Best-effort: read reddit.com cookies from a locally-installed browser and return them as a
+ * Cookie header. Sending these (even anonymous) cookies makes Reddit's JSON API serve requests
+ * that would otherwise be 403-blocked from the network. Returns "" when nothing is available.
+ *
+ * Uses macOS/Linux direct decryption (the common case); on Windows it returns "" and callers
+ * fall back to OAuth. No Reddit login is required - any reddit.com cookies suffice.
+ */
+export async function extractRedditCookieHeader(
+  opts: { readonly browser?: BrowserKey; readonly profile?: string } = {},
+): Promise<string> {
+  return extractCookieHeaderForHost("%reddit.com", opts)
+}
+
+/**
+ * Best-effort: read amazon.* cookies from a locally-installed, logged-in browser and return
+ * them as a Cookie header. Logged-out visitors only see a handful of "featured" reviews;
+ * replaying these cookies lets the scraper page deeper into a product's review history.
+ * macOS/Linux only (direct decryption); returns "" on Windows or when nothing is available.
+ */
+export async function extractAmazonCookieHeader(
+  opts: { readonly browser?: BrowserKey; readonly profile?: string } = {},
+): Promise<string> {
+  return extractCookieHeaderForHost("%amazon.%", opts)
+}
+
+/**
+ * Best-effort: read facebook.com cookies from a locally-installed, logged-in browser and return
+ * them as a Cookie header for the Meta Ad Library. The Ad Library is public, so a session is
+ * optional - it only smooths Meta's anti-bot defences. Reuses the same login as the Facebook
+ * module. macOS/Linux only (direct decryption); returns "" on Windows or when nothing is available.
+ */
+export async function extractMetaAdsCookieHeader(
+  opts: { readonly browser?: BrowserKey; readonly profile?: string } = {},
+): Promise<string> {
+  return extractCookieHeaderForHost("%facebook.com", opts)
 }

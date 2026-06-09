@@ -88,6 +88,7 @@ describe("facebook parsers", () => {
           <div role="article" id="comment_1">
             <h3><a href="/profile.php?id=1">Amy</a></h3>
             <div data-ft="c"><div>Try jojoba oil, it fixed my dryness completely.</div></div>
+            <span aria-label="12 reactions"></span>
             <a href="/groups/skincare/permalink/111/?comment_id=901">4d</a>
           </div>
           <div role="article" id="comment_2">
@@ -113,6 +114,9 @@ describe("facebook parsers", () => {
       // Facebook renders a relative time label that we capture as the timestamp.
       expect(comments[0].timestamp).toBe("4d")
       expect(comments[1].timestamp).toBe("2 h")
+      // Reaction counts are read from an aria-label when present (best-effort).
+      expect(comments[0].likeCount).toBe(12)
+      expect(comments[1].likeCount).toBeUndefined()
       // The #ufi container must NOT appear as a giant merged comment.
       expect(comments.some((c) => c.text.includes("jojoba") && c.text.includes("CeraVe"))).toBe(false)
     })

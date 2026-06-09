@@ -397,6 +397,7 @@ function parseComments($: Api, postText: string, postEl?: unknown): readonly Fac
       author: author.name,
       authorProfileUrl: author.profileUrl,
       text,
+      likeCount: extractCommentLikes($, container),
       permalink,
       timestamp: extractCommentTime($, container),
       depth: estimateDepth(container),
@@ -420,6 +421,26 @@ function isTimeLike(text: string): boolean {
     return true
   }
   return /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/.test(t) && /\d/.test(t)
+}
+
+/**
+ * Best-effort comment reaction count. Facebook renders it in an `aria-label` like
+ * "3 reactions" / "12 likes" (rendered site) or as a bare count near the reaction icons.
+ * Returns undefined when none is present (counts are often absent on the mobile/mbasic markup).
+ */
+function extractCommentLikes($: Api, container: Selection): number | undefined {
+  let found: number | undefined
+  container.find("[aria-label]").each((_i, el) => {
+    if (found !== undefined) {
+      return
+    }
+    const label = $(el).attr("aria-label") ?? ""
+    const m = label.match(/([\d.,]+\s*[KkMm]?)\s*(?:reactions?|likes?)\b/i)
+    if (m !== null) {
+      found = parseCount(m[1])
+    }
+  })
+  return found
 }
 
 /** Best-effort comment timestamp: the time label Facebook renders on the comment. */

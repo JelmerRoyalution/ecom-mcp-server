@@ -7,13 +7,37 @@ import { FastMCP } from "fastmcp"
 import { Option } from "functype"
 import { z } from "zod"
 
+import { getAmazonClient, initializeAmazonClient } from "./amazon/amazon-client"
+import { buildAmazonSessionFromCookie } from "./amazon/cookies"
+import { formatProduct, formatProductSearch, formatProductWithReviews } from "./amazon/format"
+import type { AmazonApiProvider, AmazonEngine, AmazonReviewSort, AmazonSession, AmazonStarFilter } from "./amazon/types"
 import { getRedditClient, initializeRedditClient } from "./client/reddit-client"
-import { type BrowserKey, extractFacebookSession, extractRedditCookieHeader } from "./facebook/cookie-extractor"
+import {
+  type BrowserKey,
+  extractAmazonCookieHeader,
+  extractFacebookSession,
+  extractMetaAdsCookieHeader,
+  extractRedditCookieHeader,
+} from "./facebook/cookie-extractor"
 import { buildSessionFromCookies, buildSessionFromParts } from "./facebook/cookies"
 import { isPlaywrightAvailable } from "./facebook/engines"
 import { getFacebookClient, initializeFacebookClient } from "./facebook/facebook-client"
 import { formatFeed, formatGroupInfo, formatGroupSearch, formatPostComments } from "./facebook/format"
 import type { FacebookEngine, FacebookSession } from "./facebook/types"
+import { buildMetaAdsSessionFromCookie } from "./meta-ads/cookies"
+import { formatAdvertiserAds, formatBrands, formatDownloadManifest } from "./meta-ads/format"
+import { getMetaAdsClient, initializeMetaAdsClient } from "./meta-ads/meta-ads-client"
+import type {
+  MetaAdActiveStatus,
+  MetaAdMediaType,
+  MetaAdPlatform,
+  MetaAdsApiProvider,
+  MetaAdsEngine,
+  MetaAdSort,
+  MetaAdsSession,
+  MetaDownloadWhat,
+  MetaTranscribeMode,
+} from "./meta-ads/types"
 import { buildPersonaBrief, classifyComment, isValuableComment, mineVoiceOfCustomer } from "./persona/schwartz"
 import type { BotDisclosureConfig, CacheConfig, RedditAuthMode, RedditSafeMode, SafeModeConfig } from "./types"
 import { toCsv } from "./utils/csv"
@@ -22,6 +46,10 @@ import { formatPostInfo, formatSubredditInfo, formatUserInfo } from "./utils/for
 // A current desktop Chrome UA - used for Facebook fetches when none is provided.
 const DEFAULT_FACEBOOK_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+// A current desktop Chrome UA - used for Amazon fetches when none is provided.
+const DEFAULT_AMAZON_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 // Load environment variables
 dotenv.config({ quiet: true })
@@ -99,6 +127,18 @@ function unwrapClient() {
 function unwrapFacebookClient() {
   return getFacebookClient().orThrow(
     new Error("Facebook client not initialized - restart the server with Facebook support enabled."),
+  )
+}
+
+function unwrapAmazonClient() {
+  return getAmazonClient().orThrow(
+    new Error("Amazon client not initialized - restart the server with Amazon support enabled."),
+  )
+}
+
+function unwrapMetaAdsClient() {
+  return getMetaAdsClient().orThrow(
+    new Error("Meta Ad Library client not initialized - restart the server with Meta Ads support enabled."),
   )
 }
 
@@ -196,6 +236,215 @@ async function setupFacebookClient(): Promise<void> {
       console.error("[Setup] Playwright not installed - Facebook will use the lightweight HTTP engine")
       console.error(
         "[Setup]   For private groups & full comments: npm install playwright && npx playwright install chromium",
+      )
+    }
+  }
+}
+
+// Build an Amazon session from env: an explicit cookie header, or - when AMAZON_COOKIE_FROM is
+// set - auto-extracted from a locally logged-in browser (macOS/Linux). A session is optional:
+// without one, only the first (public) pages of reviews are reachable.
+async function resolveAmazonSession(): Promise<AmazonSession | undefined> {
+  const cookie = process.env.AMAZON_COOKIE
+  if (cookie !== undefined && cookie.trim() !== "") {
+    return buildAmazonSessionFromCookie(cookie).fold(
+      (err) => {
+        console.error(`[Amazon] ${err.message}`)
+        return undefined
+      },
+      (session) => session,
+    )
+  }
+
+  const from = process.env.AMAZON_COOKIE_FROM
+  if (from !== undefined && from.trim() !== "") {
+    try {
+      const header = await extractAmazonCookieHeader({
+        browser: from.trim() as BrowserKey,
+        profile: process.env.AMAZON_COOKIE_FROM_PROFILE ?? process.env.FACEBOOK_COOKIE_FROM_PROFILE ?? "Default",
+      })
+      if (header === "") {
+        console.error(`[Amazon] No amazon.com cookies found in ${from} (log in to amazon.com in that browser first).`)
+        return undefined
+      }
+      return buildAmazonSessionFromCookie(header).fold(
+        (err) => {
+          console.error(`[Amazon] ${err.message}`)
+          return undefined
+        },
+        (session) => {
+          console.error(`[Amazon] ✓ Auto-loaded session cookies from ${from}`)
+          return session
+        },
+      )
+    } catch (err) {
+      console.error(
+        `[Amazon] Could not auto-read cookies from ${from}: ${err instanceof Error ? err.message : String(err)}`,
+      )
+      return undefined
+    }
+  }
+
+  return undefined
+}
+
+// Initialize the Amazon reviews scraping client (always available; depth via cookies or a paid API).
+async function setupAmazonClient(): Promise<void> {
+  const engine = (process.env.AMAZON_ENGINE ?? "auto") as AmazonEngine
+  if (!["auto", "http", "browser", "api"].includes(engine)) {
+    console.error(`[Error] Invalid AMAZON_ENGINE: ${engine}`)
+    console.error("[Error] Valid options are: auto, http, browser, api")
+    process.exit(1)
+  }
+
+  const session = await resolveAmazonSession()
+  const minDelayRaw = Number(process.env.AMAZON_MIN_DELAY_MS ?? "3000")
+  const maxPagesRaw = Number(process.env.AMAZON_MAX_REVIEW_PAGES ?? "10")
+  const cacheEnabled = (process.env.AMAZON_CACHE ?? "on") !== "off"
+  const cacheMaxMb = Number(process.env.AMAZON_CACHE_MAX_MB ?? "50")
+
+  // Optional paid reviews API (the most reliable path).
+  const apiKey = process.env.AMAZON_API_KEY
+  const apiProvider = (process.env.AMAZON_API_PROVIDER ?? "unwrangle") as AmazonApiProvider
+  const api = apiKey !== undefined && apiKey.trim() !== "" ? { provider: apiProvider, key: apiKey.trim() } : undefined
+  if (api !== undefined && !["unwrangle", "rainforest"].includes(apiProvider)) {
+    console.error(`[Error] Invalid AMAZON_API_PROVIDER: ${apiProvider} (valid: unwrangle, rainforest)`)
+    process.exit(1)
+  }
+
+  initializeAmazonClient({
+    session,
+    engine,
+    marketplace: (process.env.AMAZON_MARKETPLACE ?? "com").replace(/^amazon\./i, ""),
+    userAgent: process.env.AMAZON_USER_AGENT ?? DEFAULT_AMAZON_UA,
+    minDelayMs: Number.isFinite(minDelayRaw) && minDelayRaw >= 0 ? minDelayRaw : 3000,
+    headless: (process.env.AMAZON_HEADLESS ?? "true") !== "false",
+    locale: process.env.AMAZON_LOCALE ?? "en_US",
+    maxReviewPages: Number.isFinite(maxPagesRaw) && maxPagesRaw > 0 ? Math.min(maxPagesRaw, 100) : 10,
+    api,
+    cache: {
+      enabled: cacheEnabled,
+      maxBytes: (Number.isFinite(cacheMaxMb) && cacheMaxMb > 0 ? cacheMaxMb : 50) * 1024 * 1024,
+    },
+  })
+
+  console.error("[Setup] Amazon client initialized")
+  console.error(`[Setup] Amazon engine: ${engine}`)
+  if (api !== undefined) {
+    console.error(`[Setup] ✓ Amazon reviews API configured (${apiProvider}) - most reliable path`)
+  } else if (session !== undefined) {
+    console.error("[Setup] ✓ Amazon session cookies loaded - can page deeper into review history")
+  } else {
+    console.error("[Setup] Amazon: no session/API - the HTTP engine reads the first (public) pages of reviews")
+    console.error("[Setup]   For depth: set AMAZON_COOKIE (logged-in header) or AMAZON_API_KEY (reviews API)")
+  }
+}
+
+// Build a Meta Ad Library session: an explicit META_ADS_COOKIE, an auto-extracted one, or - by
+// default - the same facebook.com login the Facebook module already uses (the Ad Library is public,
+// so a session is optional and only smooths Meta's anti-bot defences).
+async function resolveMetaAdsSession(): Promise<MetaAdsSession | undefined> {
+  const cookie = process.env.META_ADS_COOKIE
+  if (cookie !== undefined && cookie.trim() !== "") {
+    return buildMetaAdsSessionFromCookie(cookie).fold(
+      (err) => {
+        console.error(`[MetaAds] ${err.message}`)
+        return undefined
+      },
+      (session) => session,
+    )
+  }
+
+  const from = process.env.META_ADS_COOKIE_FROM
+  if (from !== undefined && from.trim() !== "") {
+    try {
+      const header = await extractMetaAdsCookieHeader({
+        browser: from.trim() as BrowserKey,
+        profile: process.env.META_ADS_COOKIE_FROM_PROFILE ?? process.env.FACEBOOK_COOKIE_FROM_PROFILE ?? "Default",
+      })
+      if (header !== "") {
+        return buildMetaAdsSessionFromCookie(header).fold(
+          () => undefined,
+          (session) => {
+            console.error(`[MetaAds] ✓ Auto-loaded cookies from ${from}`)
+            return session
+          },
+        )
+      }
+    } catch (err) {
+      console.error(
+        `[MetaAds] Could not auto-read cookies from ${from}: ${err instanceof Error ? err.message : String(err)}`,
+      )
+    }
+  }
+
+  // Default: reuse the resolved Facebook session (same facebook.com login).
+  const fb = await resolveFacebookSession()
+  return fb !== undefined ? { cookieHeader: fb.cookieHeader } : undefined
+}
+
+// Initialize the Meta Ad Library scraping client (always available; the Ad Library is public).
+async function setupMetaAdsClient(): Promise<void> {
+  const engine = (process.env.META_ADS_ENGINE ?? "auto") as MetaAdsEngine
+  if (!["auto", "http", "browser", "api"].includes(engine)) {
+    console.error(`[Error] Invalid META_ADS_ENGINE: ${engine}`)
+    console.error("[Error] Valid options are: auto, http, browser, api")
+    process.exit(1)
+  }
+
+  const session = await resolveMetaAdsSession()
+  const minDelayRaw = Number(process.env.META_ADS_MIN_DELAY_MS ?? "5000")
+  const maxPagesRaw = Number(process.env.META_ADS_MAX_PAGES ?? "10")
+  const cacheEnabled = (process.env.META_ADS_CACHE ?? "on") !== "off"
+  const cacheMaxMb = Number(process.env.META_ADS_CACHE_MAX_MB ?? "50")
+
+  // Optional paid Ad Library API (handles proxies + token rotation; the most reliable path at scale).
+  const apiKey = process.env.META_ADS_API_KEY
+  const apiProvider = (process.env.META_ADS_API_PROVIDER ?? "scrapecreators") as MetaAdsApiProvider
+  const api = apiKey !== undefined && apiKey.trim() !== "" ? { provider: apiProvider, key: apiKey.trim() } : undefined
+  if (api !== undefined && !["scrapecreators"].includes(apiProvider)) {
+    console.error(`[Error] Invalid META_ADS_API_PROVIDER: ${apiProvider} (valid: scrapecreators)`)
+    process.exit(1)
+  }
+
+  initializeMetaAdsClient({
+    session,
+    engine,
+    country: process.env.META_ADS_COUNTRY ?? "US",
+    userAgent: process.env.META_ADS_USER_AGENT ?? DEFAULT_FACEBOOK_UA,
+    minDelayMs: Number.isFinite(minDelayRaw) && minDelayRaw >= 0 ? minDelayRaw : 5000,
+    headless: (process.env.META_ADS_HEADLESS ?? "true") !== "false",
+    locale: process.env.META_ADS_LOCALE ?? "en_US",
+    maxPages: Number.isFinite(maxPagesRaw) && maxPagesRaw > 0 ? Math.min(maxPagesRaw, 50) : 10,
+    api,
+    cache: {
+      enabled: cacheEnabled,
+      maxBytes: (Number.isFinite(cacheMaxMb) && cacheMaxMb > 0 ? cacheMaxMb : 50) * 1024 * 1024,
+    },
+  })
+
+  console.error("[Setup] Meta Ad Library client initialized")
+  console.error(`[Setup] Meta Ads engine: ${engine}`)
+  if (api !== undefined) {
+    console.error(`[Setup] ✓ Meta Ads API configured (${apiProvider}) - most reliable path`)
+  } else if (session !== undefined) {
+    console.error("[Setup] ✓ Meta Ads session loaded (reuses your Facebook login) - smoother anti-bot")
+  } else {
+    console.error(
+      "[Setup] Meta Ads: no session - the public Ad Library still works (a Facebook login improves reliability)",
+    )
+  }
+
+  if (engine === "browser" || engine === "auto") {
+    const hasPlaywright = await isPlaywrightAvailable()
+    if (hasPlaywright) {
+      console.error("[Setup] ✓ Playwright detected - Meta Ads browser engine available (most robust path)")
+    } else if (engine === "browser") {
+      console.error("[Setup] ✗ META_ADS_ENGINE=browser but Playwright is not installed")
+      console.error("[Setup]   Install with: npm install playwright && npx playwright install chromium")
+    } else {
+      console.error(
+        "[Setup] Playwright not installed - Meta Ads will use the brittle HTTP engine (set META_ADS_API_KEY for reliability)",
       )
     }
   }
@@ -346,8 +595,9 @@ if (process.env.OAUTH_ENABLED === "true" && process.env.OAUTH_TOKEN === undefine
 const server = new FastMCP({
   name: "reddit-mcp-server",
   version: VERSION,
-  instructions: `An e-commerce customer-research MCP server. It scrapes discussions from Reddit AND Facebook
-groups, then turns them into customer personas using Eugene Schwartz's "Breakthrough Advertising" framework.
+  instructions: `An e-commerce customer-research MCP server. It scrapes discussions from Reddit, Facebook
+groups, AND Amazon product reviews, then turns them into customer personas using Eugene Schwartz's
+"Breakthrough Advertising" framework.
 
 Reddit capabilities:
 - Fetch Reddit posts, comments, and user information
@@ -365,19 +615,27 @@ Facebook capabilities (tools prefixed facebook_*):
 - Get group metadata and search for groups by niche
 - Scrape public Facebook Page feeds
 
+Amazon capabilities (tools prefixed amazon_*):
+- Scrape customer reviews for any product by ASIN or product URL (star rating, title, body,
+  verified-purchase flag, date, helpful votes) - a rich vein of voice-of-customer language
+- Get product metadata + rating summary (average stars, total ratings, per-star distribution)
+- The free HTTP engine reads the first public pages; for full review history set AMAZON_COOKIE
+  (a logged-in session) or AMAZON_API_KEY (a reviews API: Unwrangle or Rainforest)
+
 Customer-persona workflow (Schwartz "Breakthrough Advertising"):
-- analyze_voice_of_customer: mine a corpus of comments/posts into pains, desires, objections, questions,
-  emotional triggers, product mentions, and verbatim quotes
+- analyze_voice_of_customer: mine a corpus of comments/posts/reviews into pains, desires, objections,
+  questions, emotional triggers, product mentions, and verbatim quotes
 - build_customer_persona: assemble a persona brief organized by mass desire, the 5 awareness stages, and
   the 5 market-sophistication levels - then synthesize the persona from that evidence
-- These persona tools are platform-agnostic: feed them text scraped from Reddit, Facebook, or both.
+- These persona tools are platform-agnostic: feed them text scraped from Reddit, Facebook, Amazon, or all.
 
 For Reddit write operations (posting, replying, editing, deleting), ensure REDDIT_USERNAME and REDDIT_PASSWORD are configured.
 
 IMPORTANT - research data ethics:
 - Scraped discussion is for aggregate customer-persona research only. Do NOT de-anonymize, profile, or
-  re-identify individuals, and do NOT republish people's verbatim posts/comments as-is.
-- Respect Facebook's and Reddit's Terms; only access private groups you are legitimately a member of.
+  re-identify individuals, and do NOT republish people's verbatim posts/comments/reviews as-is.
+- Respect Facebook's, Reddit's, and Amazon's Terms; only access private groups you are legitimately a
+  member of, and use your own logged-in session for any Amazon depth scraping.
 
 IMPORTANT - Reddit Responsible Builder Policy compliance:
 - Data retrieved via these tools must NOT be used for AI model training without Reddit's written approval
@@ -1346,14 +1604,322 @@ server.addTool({
   },
 })
 
+// ───────────────────────────── Amazon tools ─────────────────────────────
+// These scrape Amazon product REVIEWS for e-commerce customer research. The free HTTP engine
+// reads the first (public) pages of reviews; for depth, set AMAZON_COOKIE from a logged-in
+// browser (optional Playwright browser engine) or AMAZON_API_KEY for a reliable reviews API.
+
+server.addTool({
+  name: "test_amazon_connection",
+  description: "Check Amazon scraping configuration: session cookies, engine, paid API, and Playwright availability.",
+  parameters: z.object({}),
+  execute: async () => {
+    const client = getAmazonClient()
+    const hasClient = client.fold(
+      () => false,
+      () => true,
+    )
+    if (!hasClient) {
+      return "Amazon client not initialized."
+    }
+    const amz = client.orThrow(new Error("Amazon client not initialized"))
+    const engine = await amz.activeEngineName()
+    const playwright = await isPlaywrightAvailable()
+
+    return `Amazon Scraper Status:
+- Session (cookies): ${amz.hasSession() ? "✓ loaded (can page deeper into reviews)" : "✗ none (only first public pages)"}
+- Active engine: ${engine}
+- Playwright browser engine: ${playwright ? "✓ available" : "✗ not installed"}
+- Reviews API: ${engine === "api" ? "✓ configured (most reliable)" : "✗ not configured (set AMAZON_API_KEY)"}
+
+${engine === "api" || amz.hasSession() ? "" : "Tip: for full review history, set AMAZON_COOKIE from a logged-in browser, or AMAZON_API_KEY (Unwrangle/Rainforest)."}`
+  },
+})
+
+server.addTool({
+  name: "amazon_search_products",
+  description:
+    "Search Amazon for products matching a query (e.g. a niche like 'magnesium glycinate'). Returns product names " +
+    "and ASINs to feed into amazon_get_product_reviews. Use this when the user names a niche but no specific product. " +
+    "Amazon search is bot-protected when logged out, so it's most reliable with a logged-in AMAZON_COOKIE + the " +
+    "browser engine (run `pnpm run setup`).",
+  parameters: z.object({
+    query: z.string().describe("Search query, e.g. a product niche or keyword"),
+    limit: z.number().min(1).max(50).default(15).describe("Maximum number of products to return"),
+    marketplace: z.string().optional().describe("Marketplace TLD, e.g. 'com', 'co.uk', 'de'"),
+  }),
+  execute: async (args) => {
+    const amz = unwrapAmazonClient()
+    if (args.query.trim() === "") {
+      // eslint-disable-next-line functype/prefer-either
+      throw new Error("Search query cannot be empty")
+    }
+    const result = await amz.searchProducts(args.query, { limit: args.limit, marketplace: args.marketplace })
+    return result.fold(
+      (err) => {
+        // eslint-disable-next-line functype/prefer-either
+        throw new Error(err.message)
+      },
+      (products) => formatProductSearch(args.query, products),
+    )
+  },
+})
+
+server.addTool({
+  name: "amazon_get_product_reviews",
+  description:
+    "Scrape customer reviews for an Amazon product to mine voice-of-customer language. Pass a 10-character ASIN " +
+    "or any Amazon product/review URL. Returns the product's rating summary plus individual reviews (star rating, " +
+    "title, body, verified-purchase flag, date, helpful votes). To gather depth, when no single star_filter is " +
+    "pinned it automatically fans out across a 5★/3★/1★ spread (what they love / balanced / biggest complaints) and " +
+    "dedupes (Amazon caps each view at ~100 reviews, so the ceiling is a few hundred/product). Needs a logged-in " +
+    "AMAZON_COOKIE or AMAZON_API_KEY; some products are gated to a fixed ~8-review 'limited selection' that no " +
+    "scraper can exceed.",
+  parameters: z.object({
+    product: z.string().describe("A 10-character ASIN (e.g. 'B0XXXXXXXX') or an Amazon product/review URL"),
+    limit: z.number().min(1).max(500).default(50).describe("Maximum number of reviews to retrieve"),
+    sort: z.enum(["recent", "helpful"]).default("recent").describe("Order reviews by most recent or most helpful"),
+    star_filter: z
+      .enum(["all", "five", "four", "three", "two", "one", "positive", "critical"])
+      .default("all")
+      .describe("Only return reviews with this star rating (or positive/critical)"),
+    verified_only: z.boolean().default(false).describe("Only include verified-purchase reviews"),
+    marketplace: z
+      .string()
+      .optional()
+      .describe("Marketplace TLD override, e.g. 'com', 'co.uk', 'de' (auto-detected from a full URL)"),
+  }),
+  execute: async (args) => {
+    const amz = unwrapAmazonClient()
+    const result = await amz.getProductReviews(args.product, {
+      limit: args.limit,
+      sort: args.sort as AmazonReviewSort,
+      star: args.star_filter as AmazonStarFilter,
+      reviewerType: args.verified_only ? "verified" : "all",
+      marketplace: args.marketplace,
+    })
+    return result.fold(
+      (err) => {
+        // eslint-disable-next-line functype/prefer-either
+        throw new Error(err.message)
+      },
+      (data) => formatProductWithReviews(data),
+    )
+  },
+})
+
+server.addTool({
+  name: "amazon_get_product_info",
+  description:
+    "Get an Amazon product's metadata and rating summary (title, brand, average stars, total ratings, and the " +
+    "per-star distribution when available) without pulling full review bodies. Pass an ASIN or product URL.",
+  parameters: z.object({
+    product: z.string().describe("A 10-character ASIN or an Amazon product/review URL"),
+    marketplace: z.string().optional().describe("Marketplace TLD override, e.g. 'com', 'co.uk', 'de'"),
+  }),
+  execute: async (args) => {
+    const amz = unwrapAmazonClient()
+    const result = await amz.getProductInfo(args.product, args.marketplace)
+    return result.fold(
+      (err) => {
+        // eslint-disable-next-line functype/prefer-either
+        throw new Error(err.message)
+      },
+      (product) => formatProduct(product),
+    )
+  },
+})
+
+// ──────────────── Meta Ad Library tools (competitor ad spying) ────────────────
+// Scrape the public Meta (Facebook/Instagram) Ad Library: find a brand's advertiser pages by its
+// bare domain, then fetch their ads with copy/CTA/media. Most robust with META_ADS_ENGINE=browser
+// (Playwright) reusing your Facebook login; a paid META_ADS_API_KEY is the hands-off path at scale.
+
+server.addTool({
+  name: "meta_ads_find_brands",
+  description:
+    "Discover advertisers running ads in the Meta (Facebook/Instagram) Ad Library. BEST INPUT: a brand's " +
+    "bare domain (e.g. 'vitalityextracts.com', no https://) - a unique domain surfaces the brand's whole " +
+    "connected page network (its main page PLUS affiliate/advertorial pages). A niche keyword also works but is " +
+    "noisier. Returns distinct advertiser cards (page name, page id, # of ads seen, sample copy) ranked by ad " +
+    "volume; feed one into meta_ads_get_advertiser_ads.",
+  parameters: z.object({
+    query: z.string().describe("A brand's bare domain (recommended, e.g. 'vitalityextracts.com') or a niche keyword"),
+    country: z.string().default("US").describe("Ad Library country (ISO code, e.g. 'US', 'GB', or 'ALL')"),
+    active_status: z
+      .enum(["all", "active", "inactive"])
+      .default("active")
+      .describe("Only include ads with this status"),
+    limit: z.number().min(1).max(100).default(25).describe("Maximum number of advertisers to return"),
+  }),
+  execute: async (args) => {
+    const meta = unwrapMetaAdsClient()
+    if (args.query.trim() === "") {
+      // eslint-disable-next-line functype/prefer-either
+      throw new Error("Search query cannot be empty")
+    }
+    const result = await meta.findBrands(args.query, {
+      country: args.country,
+      activeStatus: args.active_status as MetaAdActiveStatus,
+      limit: args.limit,
+    })
+    return result.fold(
+      (err) => {
+        // eslint-disable-next-line functype/prefer-either
+        throw new Error(err.message)
+      },
+      (brands) => formatBrands(args.query, brands),
+    )
+  },
+})
+
+server.addTool({
+  name: "meta_ads_get_advertiser_ads",
+  description:
+    "Fetch an advertiser's ads from the Meta Ad Library with their full ad copy, headline, CTA, landing page, " +
+    "platforms and run-length. Pass a page id, an Ad Library URL (with view_all_page_id=), or a page name/domain. " +
+    "Filter by media type (image/video/etc.), active status and platform. Sorts by longest-running first by " +
+    "default - the strongest free 'winning ad' signal (a long-running, heavily-duplicated creative is almost " +
+    "certainly profitable).",
+  parameters: z.object({
+    advertiser: z
+      .string()
+      .describe("A page id, an Ad Library URL (view_all_page_id=...), or a page name / brand domain"),
+    country: z.string().default("US").describe("Ad Library country (ISO code, e.g. 'US', 'GB', or 'ALL')"),
+    media_type: z
+      .enum(["all", "image", "video", "meme", "none"])
+      .default("all")
+      .describe("Only include ads of this media type"),
+    active_status: z.enum(["all", "active", "inactive"]).default("all").describe("Only include ads with this status"),
+    platform: z
+      .enum(["facebook", "instagram", "messenger", "audience_network", "threads"])
+      .optional()
+      .describe("Only include ads delivered on this platform"),
+    sort: z
+      .enum(["relevance", "newest", "longest_running"])
+      .default("longest_running")
+      .describe("Order ads; longest_running surfaces likely winners first"),
+    limit: z.number().min(1).max(200).default(50).describe("Maximum number of ads to return"),
+  }),
+  execute: async (args) => {
+    const meta = unwrapMetaAdsClient()
+    const result = await meta.getAdvertiserAds(args.advertiser, {
+      country: args.country,
+      mediaType: args.media_type as MetaAdMediaType,
+      activeStatus: args.active_status as MetaAdActiveStatus,
+      platform: args.platform as MetaAdPlatform | undefined,
+      sort: args.sort as MetaAdSort,
+      limit: args.limit,
+    })
+    return result.fold(
+      (err) => {
+        // eslint-disable-next-line functype/prefer-either
+        throw new Error(err.message)
+      },
+      (data) => formatAdvertiserAds(data),
+    )
+  },
+})
+
+server.addTool({
+  name: "meta_ads_download_creatives",
+  description:
+    "Download an advertiser's ad creative FILES (static images and/or videos) from the Meta Ad Library to a local " +
+    "folder, so you can swipe them. Pass a page id, an Ad Library URL (view_all_page_id=), or a brand domain. Files " +
+    "are saved under <output_dir or META_ADS_DOWNLOAD_DIR or 'meta-ads-creatives'>/<advertiser>/, named by ad id, " +
+    "with the correct extension sniffed from the file bytes. Defaults to static images. For VIDEOS, when the local " +
+    "whisper.cpp toolchain is installed it also TRANSCRIBES each video to a `.txt` script plus a combined " +
+    "`.script.md` (ad copy + spoken script). NOTE: this writes files to your local disk.",
+  parameters: z.object({
+    advertiser: z
+      .string()
+      .describe("A page id, an Ad Library URL (view_all_page_id=...), or a page name / brand domain"),
+    country: z.string().default("US").describe("Ad Library country (ISO code, e.g. 'US', 'GB', or 'ALL')"),
+    what: z
+      .enum(["images", "videos", "all"])
+      .default("images")
+      .describe("Which creatives to download: static images, videos, or both"),
+    transcribe: z
+      .enum(["auto", "off"])
+      .default("auto")
+      .describe("Transcribe downloaded videos to a text script via local whisper.cpp (auto = when installed)"),
+    media_type: z
+      .enum(["all", "image", "video", "meme", "none"])
+      .optional()
+      .describe("Which ads to pull before downloading (default: follows `what`)"),
+    active_status: z.enum(["all", "active", "inactive"]).default("all").describe("Only include ads with this status"),
+    limit: z.number().min(1).max(200).default(50).describe("Maximum number of ads to pull"),
+    max_files: z.number().min(1).max(300).default(50).describe("Hard cap on the number of files downloaded"),
+    output_dir: z
+      .string()
+      .optional()
+      .describe("Base output directory (default: META_ADS_DOWNLOAD_DIR env, else 'meta-ads-creatives')"),
+  }),
+  execute: async (args) => {
+    const meta = unwrapMetaAdsClient()
+    const threadsEnv = process.env.META_ADS_WHISPER_THREADS
+    const result = await meta.downloadAdvertiserCreatives(args.advertiser, {
+      country: args.country,
+      what: args.what as MetaDownloadWhat,
+      mediaType: args.media_type as MetaAdMediaType | undefined,
+      activeStatus: args.active_status as MetaAdActiveStatus,
+      transcribe: args.transcribe as MetaTranscribeMode,
+      transcribeFast: (process.env.META_ADS_WHISPER_FAST ?? "false") === "true",
+      transcribeThreads: threadsEnv !== undefined && Number(threadsEnv) > 0 ? Number(threadsEnv) : undefined,
+      limit: args.limit,
+      maxFiles: args.max_files,
+      baseDir: args.output_dir ?? process.env.META_ADS_DOWNLOAD_DIR,
+    })
+    return result.fold(
+      (err) => {
+        // eslint-disable-next-line functype/prefer-either
+        throw new Error(err.message)
+      },
+      (manifest) => formatDownloadManifest(manifest),
+    )
+  },
+})
+
+server.addTool({
+  name: "test_meta_ads_connection",
+  description:
+    "Check Meta Ad Library scraping configuration: session cookies, engine, paid API, and Playwright availability.",
+  parameters: z.object({}),
+  execute: async () => {
+    const client = getMetaAdsClient()
+    const hasClient = client.fold(
+      () => false,
+      () => true,
+    )
+    if (!hasClient) {
+      return "Meta Ad Library client not initialized."
+    }
+    const meta = client.orThrow(new Error("Meta Ad Library client not initialized"))
+    const engine = await meta.activeEngineName()
+    const playwright = await isPlaywrightAvailable()
+
+    return `Meta Ad Library Scraper Status:
+- Session (cookies): ${meta.hasSession() ? "✓ loaded (reuses your Facebook login)" : "✗ none (public reads still work)"}
+- Active engine: ${engine}
+- Playwright browser engine: ${playwright ? "✓ available (most robust)" : "✗ not installed"}
+- Reviews/ads API: ${engine === "api" ? "✓ configured (most reliable)" : "✗ not configured (set META_ADS_API_KEY)"}
+
+${
+  engine === "api" || playwright
+    ? "Tip: search a brand's bare domain (e.g. 'vitalityextracts.com') to surface its whole connected page network."
+    : "Tip: install Playwright (npm install playwright && npx playwright install chromium) for the robust browser engine, or set META_ADS_API_KEY."
+}`
+  },
+})
+
 // ──────────────── Customer persona tools (Schwartz framework) ────────────────
-// Platform-agnostic: feed in comments/posts scraped from Facebook AND/OR Reddit.
+// Platform-agnostic: feed in comments/posts/reviews scraped from Facebook, Reddit AND/OR Amazon.
 
 server.addTool({
   name: "analyze_voice_of_customer",
   description:
-    "Mine a corpus of customer discussion (Facebook/Reddit comments, posts) into voice-of-customer buckets: " +
-    "pains, desires, objections, questions, emotional triggers, product mentions, recurring phrases, and verbatim quotes.",
+    "Mine a corpus of customer discussion (Facebook/Reddit comments & posts, Amazon reviews) into voice-of-customer " +
+    "buckets: pains, desires, objections, questions, emotional triggers, product mentions, recurring phrases, and verbatim quotes.",
   parameters: z.object({
     texts: z.array(z.string()).min(1).describe("Array of raw text snippets (comments/posts) to analyze"),
   }),
@@ -1394,17 +1960,22 @@ ${list(voc.quotes)}`)
 /* eslint-disable functype/no-imperative-loops, functype/prefer-map -- these tools fan out over
    sources/posts/comments and accumulate rows; nested loops are the clearest expression. */
 
-// One flat row of voice-of-customer data. Each post emits a row_type="post" row, then its
-// comments as row_type="comment" rows sharing the same post_id - so the post<->comment
-// relationship is explicit (group or sort by post_id).
+// One flat row of voice-of-customer data. Each post/product emits a row_type="post" row, then
+// its comments (row_type="comment") or reviews (row_type="review") sharing the same post_id - so
+// the parent<->child relationship is explicit (group or sort by post_id). For Amazon, the
+// product is the "post" (post_id = ASIN) and each review is a "review" row.
+//
+// `upvotes` is the platform's social-proof signal so you can rank by what the crowd validated:
+// Reddit = comment/post score, Facebook = reactions/likes, Amazon = "found helpful" votes.
 type VocRow = {
-  platform: "facebook" | "reddit"
+  platform: "facebook" | "reddit" | "amazon"
   source_url: string
   post_id: string
   post_url: string
-  row_type: "post" | "comment"
+  row_type: "post" | "comment" | "review"
   author: string
   timestamp: string
+  upvotes: string
   category: string
   text: string
 }
@@ -1417,18 +1988,42 @@ const VOC_COLUMNS = [
   "row_type",
   "author",
   "timestamp",
+  "upvotes",
   "category",
   "text",
 ]
 
 const oneLineText = (s: string): string => s.replace(/\s+/g, " ").trim()
 
-// Deep-scrape posts AND their comment threads from Facebook groups and/or subreddits.
+// Render an optional engagement count as a CSV cell (blank when the platform didn't expose one).
+const votesCell = (n: number | undefined): string => (n === undefined ? "" : String(n))
+
+// Pick the best voice-of-customer category for an Amazon review: trust the text cues first,
+// then fall back to the star rating (low stars → pain, high stars → desire).
+function classifyReview(text: string, rating: number | undefined): string {
+  const category = classifyComment(text)
+  if (category !== "other") {
+    return category
+  }
+  if (rating !== undefined && rating <= 2) {
+    return "pain"
+  }
+  if (rating !== undefined && rating >= 4) {
+    return "desire"
+  }
+  return "other"
+}
+
+// Deep-scrape posts AND their comment threads from Facebook groups, subreddits, and/or Amazon
+// products (each Amazon product becomes a "post" row with its reviews as "review" rows).
 async function gatherVoiceRows(opts: {
   readonly facebookGroups: readonly string[]
   readonly subreddits: readonly string[]
+  readonly amazonProducts: readonly string[]
   readonly postsPerSource: number
+  readonly amazonReviewLimit: number
   readonly redditTime: string
+  readonly amazonSort: string
   readonly errors: string[]
 }): Promise<VocRow[]> {
   const rows: VocRow[] = []
@@ -1452,6 +2047,7 @@ async function gatherVoiceRows(opts: {
             row_type: "post",
             author: thread.post.author,
             timestamp: thread.post.timestamp ?? "",
+            upvotes: votesCell(thread.post.likeCount),
             category: classifyComment(thread.post.text),
             text: oneLineText(thread.post.text),
           })
@@ -1464,6 +2060,7 @@ async function gatherVoiceRows(opts: {
               row_type: "comment",
               author: c.author,
               timestamp: c.timestamp ?? "",
+              upvotes: votesCell(c.likeCount),
               category: classifyComment(c.text),
               text: oneLineText(c.text),
             })
@@ -1496,6 +2093,7 @@ async function gatherVoiceRows(opts: {
         row_type: "post",
         author: post.author,
         timestamp: new Date(post.createdUtc * 1000).toISOString(),
+        upvotes: votesCell(post.score),
         category: classifyComment(postText),
         text: oneLineText(postText),
       })
@@ -1512,6 +2110,7 @@ async function gatherVoiceRows(opts: {
               row_type: "comment",
               author: c.author,
               timestamp: new Date(c.createdUtc * 1000).toISOString(),
+              upvotes: votesCell(c.score),
               category: classifyComment(c.body),
               text: oneLineText(c.body),
             })
@@ -1521,6 +2120,52 @@ async function gatherVoiceRows(opts: {
     }
   }
 
+  for (const product of opts.amazonProducts) {
+    const amz = unwrapAmazonClient()
+    const result = await amz.getProductReviews(product, {
+      limit: opts.amazonReviewLimit,
+      sort: opts.amazonSort as AmazonReviewSort,
+    })
+    result.fold(
+      (err) => {
+        opts.errors.push(`Amazon "${product}": ${err.message}`)
+      },
+      (data) => {
+        const postId = data.product.asin
+        const productUrl = data.product.url
+        rows.push({
+          platform: "amazon",
+          source_url: productUrl,
+          post_id: postId,
+          post_url: productUrl,
+          row_type: "post",
+          author: data.product.brand ?? "",
+          timestamp: "",
+          upvotes: "",
+          category: "other",
+          text: oneLineText(data.product.title),
+        })
+        for (const review of data.reviews) {
+          // Combine the headline + body so short reviews still carry their title's signal.
+          const reviewText = oneLineText([review.title, review.body].filter((t) => t.trim() !== "").join(" — "))
+          rows.push({
+            platform: "amazon",
+            source_url: productUrl,
+            post_id: postId,
+            post_url: review.permalink ?? productUrl,
+            row_type: "review",
+            author: review.author,
+            timestamp: review.date ?? "",
+            // Amazon's "N people found this helpful" - the closest analog to an upvote.
+            upvotes: votesCell(review.helpfulVotes),
+            category: classifyReview(reviewText, review.rating),
+            text: reviewText,
+          })
+        }
+      },
+    )
+  }
+
   return rows
 }
 
@@ -1528,13 +2173,19 @@ server.addTool({
   name: "build_customer_persona",
   description:
     "Build a Schwartz 'Breakthrough Advertising' customer persona brief from customer discussion. Provide raw " +
-    "'texts' and/or a 'facebook_group'/'subreddits' to auto-scrape (it pulls POSTS *and* their COMMENTS). Returns " +
-    "mined evidence organized into mass desire, awareness stages, and market sophistication, plus synthesis steps.",
+    "'texts' and/or a 'facebook_group'/'subreddits'/'amazon_products' to auto-scrape (it pulls POSTS *and* their " +
+    "COMMENTS, and Amazon products *and* their REVIEWS). Returns mined evidence organized into mass desire, " +
+    "awareness stages, and market sophistication, plus synthesis steps.",
   parameters: z.object({
     texts: z.array(z.string()).default([]).describe("Raw customer discussion snippets to analyze (optional)"),
     facebook_group: z.string().optional().describe("Optional Facebook group id/slug/URL - posts + comments scraped"),
     subreddits: z.array(z.string()).default([]).describe("Optional subreddits to scrape posts + comments from"),
-    posts_per_source: z.number().min(1).max(100).default(25).describe("Posts to open per source"),
+    amazon_products: z
+      .array(z.string())
+      .default([])
+      .describe("Optional Amazon ASINs or product URLs to scrape reviews from"),
+    posts_per_source: z.number().min(1).max(100).default(25).describe("Posts to open per Facebook/Reddit source"),
+    amazon_review_limit: z.number().min(1).max(500).default(50).describe("Reviews to pull per Amazon product"),
     reddit_time: z
       .enum(["hour", "day", "week", "month", "year", "all"])
       .default("month")
@@ -1546,27 +2197,36 @@ server.addTool({
     const fbGroups =
       args.facebook_group !== undefined && args.facebook_group.trim() !== "" ? [args.facebook_group.trim()] : []
     const rows =
-      fbGroups.length > 0 || args.subreddits.length > 0
+      fbGroups.length > 0 || args.subreddits.length > 0 || args.amazon_products.length > 0
         ? await gatherVoiceRows({
             facebookGroups: fbGroups,
             subreddits: args.subreddits,
+            amazonProducts: args.amazon_products,
             postsPerSource: args.posts_per_source,
+            amazonReviewLimit: args.amazon_review_limit,
             redditTime: args.reddit_time,
+            amazonSort: "recent",
             errors,
           })
         : []
 
-    // Feed posts plus valuable comments into the persona corpus.
+    // Feed posts plus valuable comments/reviews into the persona corpus.
     const scrapedTexts = rows
       .filter((r) => r.text.trim().length > 0 && (r.row_type === "post" || isValuableComment(r.text)))
       .map((r) => r.text)
     const texts = [...args.texts, ...scrapedTexts]
     if (texts.length === 0) {
       // eslint-disable-next-line functype/prefer-either
-      throw new Error("Provide 'texts' and/or a 'facebook_group'/'subreddits' with accessible content.")
+      throw new Error(
+        "Provide 'texts' and/or a 'facebook_group'/'subreddits'/'amazon_products' with accessible content.",
+      )
     }
 
-    const sources = [...fbGroups.map((g) => `FB:${g}`), ...args.subreddits.map((s) => `r/${s.replace(/^r\//i, "")}`)]
+    const sources = [
+      ...fbGroups.map((g) => `FB:${g}`),
+      ...args.subreddits.map((s) => `r/${s.replace(/^r\//i, "")}`),
+      ...args.amazon_products.map((p) => `AMZN:${p}`),
+    ]
     const sourceLabel =
       sources.length > 0
         ? `${sources.join(", ")} (${scrapedTexts.length} posts + comments)${args.texts.length > 0 ? " + supplied texts" : ""}`
@@ -1579,18 +2239,27 @@ server.addTool({
 server.addTool({
   name: "export_comments_csv",
   description:
-    "Scrape Facebook groups and/or Reddit subreddits to a CSV - one row per POST and per COMMENT, linked by a " +
-    "shared post_id (with a row_type of 'post' or 'comment'). Columns: platform, source_url, post_id, post_url, " +
-    "row_type, author, timestamp, category (pain/desire/objection/question/other), text. Sort by post_id to see " +
-    "each post with its comments. Low-value reactions are filtered out by default.",
+    "Scrape Facebook groups, Reddit subreddits, and/or Amazon products to a CSV - one row per POST/PRODUCT and per " +
+    "COMMENT/REVIEW, linked by a shared post_id (row_type 'post', 'comment', or 'review'; Amazon post_id = ASIN). " +
+    "Columns: platform, source_url, post_id, post_url, row_type, author, timestamp, upvotes, category " +
+    "(pain/desire/objection/question/other), text. The 'upvotes' column is the crowd-validation signal (Reddit " +
+    "score, Facebook reactions, Amazon 'found helpful' votes) - sort by it to rank pains/desires by social proof. " +
+    "Sort by post_id to see each post with its comments/reviews. Low-value reactions are filtered out by default.",
   parameters: z.object({
     facebook_groups: z
       .array(z.string())
       .default([])
       .describe("Facebook group ids, slugs, or URLs to scrape (must be a member of private ones)"),
     subreddits: z.array(z.string()).default([]).describe("Subreddit names to scrape (without the r/)"),
-    posts_per_source: z.number().min(1).max(200).default(30).describe("How many recent posts to open per source"),
-    min_words: z.number().min(1).max(50).default(4).describe("Minimum words for a comment to count as valuable"),
+    amazon_products: z.array(z.string()).default([]).describe("Amazon ASINs or product URLs to scrape reviews from"),
+    posts_per_source: z
+      .number()
+      .min(1)
+      .max(200)
+      .default(30)
+      .describe("How many recent posts to open per FB/Reddit source"),
+    amazon_review_limit: z.number().min(1).max(500).default(50).describe("How many reviews to pull per Amazon product"),
+    min_words: z.number().min(1).max(50).default(4).describe("Minimum words for a comment/review to count as valuable"),
     include_low_value: z.boolean().default(false).describe("Keep low-signal reactions too (default: filter them out)"),
     reddit_time: z
       .enum(["hour", "day", "week", "month", "year", "all"])
@@ -1602,27 +2271,30 @@ server.addTool({
       .describe("Where to save the CSV (default: ./voice-of-customer-<timestamp>.csv in the project folder)"),
   }),
   execute: async (args) => {
-    if (args.facebook_groups.length === 0 && args.subreddits.length === 0) {
+    if (args.facebook_groups.length === 0 && args.subreddits.length === 0 && args.amazon_products.length === 0) {
       // eslint-disable-next-line functype/prefer-either
-      throw new Error("Provide at least one entry in facebook_groups or subreddits.")
+      throw new Error("Provide at least one entry in facebook_groups, subreddits, or amazon_products.")
     }
 
     const errors: string[] = []
     const rows = await gatherVoiceRows({
       facebookGroups: args.facebook_groups,
       subreddits: args.subreddits,
+      amazonProducts: args.amazon_products,
       postsPerSource: args.posts_per_source,
+      amazonReviewLimit: args.amazon_review_limit,
       redditTime: args.reddit_time,
+      amazonSort: "recent",
       errors,
     })
 
-    // Keep every post; filter comments by value. Drop empties and exact duplicates.
+    // Keep every post/product; filter comments AND reviews by value. Drop empties and exact dupes.
     const seen = new Set<string>()
     const kept = rows.filter((r) => {
       if (r.text.trim() === "") {
         return false
       }
-      if (r.row_type === "comment" && !args.include_low_value && !isValuableComment(r.text, args.min_words)) {
+      if (r.row_type !== "post" && !args.include_low_value && !isValuableComment(r.text, args.min_words)) {
         return false
       }
       const key = `${r.platform}|${r.row_type}|${r.text.toLowerCase()}`
@@ -1652,8 +2324,10 @@ server.addTool({
 
     const postCount = kept.filter((r) => r.row_type === "post").length
     const commentCount = kept.filter((r) => r.row_type === "comment").length
+    const reviewCount = kept.filter((r) => r.row_type === "review").length
     const fbCount = kept.filter((r) => r.platform === "facebook").length
     const redditCount = kept.filter((r) => r.platform === "reddit").length
+    const amazonCount = kept.filter((r) => r.platform === "amazon").length
     const cats = ["pain", "desire", "objection", "question", "other"]
       .map((cat) => `${cat}=${kept.filter((r) => r.category === cat).length}`)
       .join(", ")
@@ -1664,13 +2338,13 @@ server.addTool({
 
     return `# Voice-of-Customer CSV exported ✅
 
-Saved **${kept.length}** rows (${postCount} posts + ${commentCount} comments) to:
+Saved **${kept.length}** rows (${postCount} posts/products + ${commentCount} comments + ${reviewCount} reviews) to:
 \`${target}\`
 
-- Platform: facebook=${fbCount}, reddit=${redditCount}
+- Platform: facebook=${fbCount}, reddit=${redditCount}, amazon=${amazonCount}
 - Category: ${cats}
 - Columns: ${VOC_COLUMNS.join(", ")}
-- 🔗 Each comment links to its post via **post_id** (sort by post_id to group them).
+- 🔗 Each comment/review links to its post/product via **post_id** (sort by post_id to group them).
 ${errors.length > 0 ? `\n⚠️ Some sources had issues:\n- ${errors.join("\n- ")}\n` : ""}
 ### Preview (first 5 rows)
 ${preview}`
@@ -1682,6 +2356,8 @@ ${preview}`
 async function main() {
   await setupRedditClient()
   await setupFacebookClient()
+  await setupAmazonClient()
+  await setupMetaAdsClient()
 
   const useHttp = process.env.TRANSPORT_TYPE === "httpStream" || process.env.TRANSPORT_TYPE === "http"
   const port = parseInt(process.env.PORT ?? "3000")
