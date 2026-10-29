@@ -1,2 +1,17 @@
 packages:
   - "."
+allowBuilds:
+  esbuild: true
+  msw: true
+  tldjs: true
+minimumReleaseAgeExclude:
+  - "ts-builds"
+  - "*functype*"
+
+publicHoistPattern:
+  - "*eslint*"
+  - "*prettier*"
+  - "*vitest*"
+  - "typescript"
+  - "*rimraf*"
+  - "*cross-env*"

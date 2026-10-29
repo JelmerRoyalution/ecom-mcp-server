@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "reddit-mcp-server",
   "display_name": "Reddit + Facebook + Amazon Customer Research MCP",
-  "version": "1.6.0",
+  "version": "1.7.1",
   "description": "Scrape Reddit, Facebook groups (public & private), and Amazon product reviews, and build Schwartz 'Breakthrough Advertising' customer personas - directly from Claude.",
   "long_description": "An e-commerce customer-research MCP server. It scrapes real customer discussions from Reddit, Facebook groups, AND Amazon product reviews, then turns them into customer personas using Eugene Schwartz's 'Breakthrough Advertising' framework.\n\n**Reddit (read + write):**\n- Browse/search any subreddit, fetch posts with threaded comments\n- User profiles, trending subreddits\n- Create, reply, edit, delete (with credentials) + Safe Mode spam protection\n\n**Facebook (scraping):**\n- Scrape posts from PUBLIC and PRIVATE Facebook groups (private groups need a logged-in session cookie from a member)\n- Scrape comment threads from posts\n- Group metadata, group search, public Page feeds\n- Lightweight HTTP engine by default; optional Playwright browser engine for private groups and full comment threads\n\n**Amazon (reviews scraping):**\n- Scrape customer reviews for any product by ASIN or product URL (stars, title, body, verified-purchase, date, helpful votes)\n- Product metadata + rating summary (average stars, total ratings, per-star split)\n- Free HTTP engine reads the first public pages; for full review history set AMAZON_COOKIE (logged-in session) or AMAZON_API_KEY (Unwrangle/Rainforest reviews API)\n\n**Customer personas (Schwartz framework):**\n- Mine discussions into voice-of-customer buckets: pains, desires, objections, questions, emotional triggers, verbatim quotes\n- Build a persona brief organized by mass desire, the 5 awareness stages, and the 5 market-sophistication levels\n- Works on Reddit, Facebook, Amazon, or any mix\n\n**Perfect for:**\n- E-commerce brands and DTC marketers\n- Customer/audience research and ad copywriting\n- Market and competitor analysis",
   "author": {
@@ -199,7 +199,7 @@
     "reddit_client_id": {
       "type": "string",
       "title": "Reddit Client ID",
-      "description": "Your Reddit app client ID (optional - increases rate limit to 60 req/min)",
+      "description": "Your Reddit app client ID (optional - live Reddit data; without it, reads come from RSS feeds and the Arctic Shift archive)",
       "required": false,
       "sensitive": false
     },
