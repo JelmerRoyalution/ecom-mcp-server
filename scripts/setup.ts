@@ -17,6 +17,7 @@ import {
   detectInstalledBrowsers,
   extractAmazonCookieHeader,
   extractFacebookSession,
+  extractQuoraCookieHeader,
   extractRedditCookieHeader,
 } from "../src/facebook/cookie-extractor"
 
@@ -53,9 +54,9 @@ async function main(): Promise<void> {
   log("")
   log("🛍️  E-commerce Research MCP - one-command setup")
   log("──────────────────────────────────────────────")
-  log("This connects Reddit, Facebook, and Amazon from your browser so the scraper")
-  log("can read groups you're in and full Amazon review history.")
-  log("Make sure you're logged into Facebook (and Amazon) in your normal browser first.")
+  log("This connects Reddit, Facebook, Amazon, and Quora from your browser so the scraper")
+  log("can read groups you're in, full Amazon review history, and Quora threads.")
+  log("Make sure you're logged into Facebook (and Amazon/Quora) in your normal browser first.")
   log("")
 
   const requested = process.argv[2] as BrowserKey | undefined
@@ -98,6 +99,20 @@ async function main(): Promise<void> {
     }
   } catch {
     // Best-effort; Amazon's first review pages still work without a login.
+  }
+
+  // Borrow quora.com cookies too, so the scraper can read deeper answer threads + search/topic
+  // feeds. Best-effort: question pages parse from embedded JSON-LD even without a login.
+  try {
+    const quoraCookie = await extractQuoraCookieHeader({ browser: target, profile })
+    if (quoraCookie !== "") {
+      mergeEnv({ QUORA_COOKIE: quoraCookie, QUORA_ENGINE: "browser" })
+      log("• Quora: ✓ connected (borrowed your browser login - can read deeper threads + search/topic feeds)")
+    } else {
+      log("• Quora: reads question pages without setup (log in to quora.com for search/topic feeds + depth)")
+    }
+  } catch {
+    // Best-effort; Quora question pages still parse without a login.
   }
   log("")
   log(`• Reading your Facebook login from ${target}… (a hidden browser may flash briefly)`)

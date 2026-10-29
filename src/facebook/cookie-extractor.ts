@@ -477,3 +477,15 @@ export async function extractMetaAdsCookieHeader(
 ): Promise<string> {
   return extractCookieHeaderForHost("%facebook.com", opts)
 }
+
+/**
+ * Best-effort: read quora.com cookies from a locally-installed, logged-in browser and return them
+ * as a Cookie header. Logged-out visitors hit a login-wall overlay past a question's first answers;
+ * replaying these cookies lets the scraper read deeper threads and reach search/topic feeds.
+ * macOS/Linux only (direct decryption); returns "" on Windows or when nothing is available.
+ */
+export async function extractQuoraCookieHeader(
+  opts: { readonly browser?: BrowserKey; readonly profile?: string } = {},
+): Promise<string> {
+  return extractCookieHeaderForHost("%quora.com", opts)
+}

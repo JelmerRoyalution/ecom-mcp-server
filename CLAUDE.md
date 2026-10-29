@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an e-commerce customer-research MCP (Model Context Protocol) server. It began as a Reddit MCP server and has been expanded to **also scrape public and private Facebook groups**, **Amazon product reviews**, and the **Meta (Facebook/Instagram) Ad Library** (competitor ad spying), and to turn scraped discussions into **customer personas using Eugene Schwartz's "Breakthrough Advertising" framework**. It's built with TypeScript and uses FastMCP to expose Reddit, Facebook, Amazon, Meta-Ad-Library, and persona-building tools to AI assistants.
+This is an e-commerce customer-research MCP (Model Context Protocol) server. It began as a Reddit MCP server and has been expanded to **also scrape public and private Facebook groups**, **Amazon product reviews**, **Quora Q&A threads**, and the **Meta (Facebook/Instagram) Ad Library** (competitor ad spying), and to turn scraped discussions into **customer personas using Eugene Schwartz's "Breakthrough Advertising" framework**. It's built with TypeScript and uses FastMCP to expose Reddit, Facebook, Amazon, Quora, Meta-Ad-Library, and persona-building tools to AI assistants.
 
 > Note: the npm package is still named `reddit-mcp-server` (the published identity / `mcpName` is unchanged); the repository directory is `ecom-mcp-server` reflecting the broadened scope.
 
@@ -54,6 +54,24 @@ Scrape Amazon product reviews for customer-research. Amazon shows logged-out vis
 - `amazon_get_product_info` - Product metadata + rating summary (average stars, total ratings, per-star distribution) without review bodies
 - `test_amazon_connection` - Report session/engine/API/Playwright status
 
+### Quora Tools (Q&A Scraping)
+
+Scrape Quora Q&A threads for customer-research - Quora questions are pure voice-of-customer (people literally stating their pains, desires and questions; answers reveal objections and product mentions). **All four tools validated live end-to-end** (incl. against a real logged-in session). A question page renders ~50 answers with full body text even logged-out via the **browser engine**; search and topic/Space feeds need a `QUORA_COOKIE` session (they're authenticated surfaces). By default the session is auto-picked-up by `pnpm run setup` (reuses the `cookie-extractor.ts` machinery via `extractQuoraCookieHeader`, `%quora.com`). Self-contained `src/quora/` module; **DOM-first** (Quora does NOT serve JSON-LD to logged-out clients - the parser reads the browser-rendered DOM, with a JSON-LD fallback for any render that still ships it). **Integrated into the persona pipeline** (unlike Meta Ads).
+
+- `quora_search` - Search Quora by niche/keyword → question cards (title, URL) to feed into `quora_get_question`. Needs a `QUORA_COOKIE` session + browser engine. Use when the user names a niche but no specific question.
+- `quora_get_question` - Scrape a question and its answers (author, body, best-effort upvote count + date) from a question URL or bare slug - **the core tool; works logged-out.** The upvote count is the per-answer crowd-validation signal (populated when a session is present)
+- `quora_get_topic_questions` - List the questions in a Quora topic or Space (the highest-signal "what does this niche actually ask?" query) - the Quora analog of `browse_subreddit` / `facebook_get_group_posts`. Needs a `QUORA_COOKIE` session. Pass a topic name, a `/topic/...` URL, or a Space (`q/<slug>`) URL
+- `test_quora_connection` - Report session/engine/Playwright status
+
+**Engines** (`QUORA_ENGINE`, two-tier like Facebook): `browser` (Playwright; the robust path and effectively required, the `auto` default when Playwright is present); `http` (native `fetch`; Quora returns 403/an unrendered shell to plain fetch, so best-effort only - falls back to JSON-LD on the rare render that ships it, else degrades with an actionable message). No paid `api` tier.
+
+**Two gotchas the browser engine handles automatically (each cost a round of live debugging - don't "simplify" them away):**
+
+1. **EU cookie-consent (OneTrust):** Quora won't fetch search/topic _results_ until the OneTrust banner is resolved, and it only takes effect after a **page reload**. `BrowserFetchEngine.fetchHtml` dismisses the banner (`#onetrust-reject-all-handler`, accept fallback) once per context, then reloads.
+2. **Account-language interstitial:** if the account's default language ≠ the requested page language, Quora redirects search/topic to a `/join` "add language" wall. The engine navigates on the account's own language subdomain (e.g. `nl.quora.com`), derived from the `m-ql10n_<lang>` cookie via `quoraHostForCookie`. **Only search/topic/Space URLs are localized** (`localizeQuoraUrl`) - question slugs are host-specific and 404 ("Fout") on the wrong subdomain, so they stay on `www`.
+
+**Critical parser detail:** the rendered DOM wraps each answer in a `dom_annotate_question_answer_item_N` element with the body in `.spacing_log_answer_content` (which contains a truncated preview + "Continue Reading" + the full text - `cleanAnswerBody` keeps the longest segment to de-dup), the author in a `/profile/<slug>` link (name falls back to the humanized slug when the link text is empty), the permalink in an `/answer/<slug>` link, and the upvote count in an `aria-label` (absent logged-out - Quora hides exact counts). Search/topic cards come from `parseQuestionCards` (anchor scan; prefers a question-like anchor over answer date/byline links). A non-existent/merged slug renders an "Error"/"Fout" shell, which `getQuestion` surfaces as a clear not-found error.
+
 ### Meta Ad Library Tools (Competitor Ad Spying)
 
 Scrape the **public** Meta (Facebook/Instagram) Ad Library - the capability behind ad-spy tools like Atria/Foreplay/Winning Hunter. The official Graph `ads_archive` API only covers political/issue ads, so this targets the same internal GraphQL endpoint (`facebook.com/api/graphql/`, `AdLibrarySearchPaginationQuery`) the public web UI calls, returning JSON (ad copy, headline, CTA, image/video URLs, landing page, page name, run-dates, active status, platforms). The Ad Library is public, so no login is required; a Facebook session only smooths anti-bot. Self-contained `src/meta-ads/` module; **JSON-first** (the browser engine intercepts the GraphQL response, the parser normalizes JSON - it does NOT scrape HTML). Standalone (no persona-pipeline integration).
@@ -67,11 +85,11 @@ Scrape the **public** Meta (Facebook/Instagram) Ad Library - the capability behi
 
 ### Customer Persona Tools (Schwartz "Breakthrough Advertising")
 
-Platform-agnostic - feed them text scraped from Reddit, Facebook, Amazon, or any mix.
+Platform-agnostic - feed them text scraped from Reddit, Facebook, Amazon, Quora, or any mix.
 
 - `analyze_voice_of_customer` - Mine a corpus into pains, desires, objections, questions, emotional triggers, product mentions, recurring phrases, and verbatim quotes
-- `build_customer_persona` - Produce a persona brief organized by **mass desire**, the **5 awareness stages**, and the **5 market-sophistication levels**, with synthesis instructions for the LLM. Accepts raw `texts` and/or `facebook_group`/`subreddits`/`amazon_products` to auto-scrape **posts AND their comments**, and **products AND their reviews** (via the shared `gatherVoiceRows` helper in `index.ts`).
-- `export_comments_csv` - Deep-scrape Facebook groups, subreddits, and/or Amazon products to a **CSV**, one row per **post/product and comment/review**, linked by a shared `post_id` with a `row_type` of `post`/`comment`/`review` (Amazon `post_id` = ASIN). Columns: `platform, source_url, post_id, post_url, row_type, author, timestamp, upvotes, category, text` (ISO timestamps for Reddit; rendered labels for Facebook/Amazon). The **`upvotes`** column is the per-row crowd-validation signal - Reddit `score` (post+comment), Facebook reactions (`likeCount`), Amazon "found helpful" votes (`helpfulVotes`); blank when the platform exposed none (populated via the `votesCell` helper in `index.ts`). All three platforms share `gatherVoiceRows` (Facebook: `getGroupComments` feed→post→thread; Reddit: top posts→comments; Amazon: `getProductReviews` per ASIN). Posts/products are always kept; comments **and reviews** are value-filtered via `isValuableComment` and tagged via `classifyComment` (Amazon reviews additionally fall back to the star rating: ≤2★→pain, ≥4★→desire, via `classifyReview`). CSV serialization in `src/utils/csv.ts`. Output files match `voice-of-customer-*.csv` and are git-ignored (may contain personal data).
+- `build_customer_persona` - Produce a persona brief organized by **mass desire**, the **5 awareness stages**, and the **5 market-sophistication levels**, with synthesis instructions for the LLM. Accepts raw `texts` and/or `facebook_group`/`subreddits`/`amazon_products`/`quora_questions`/`quora_topics` to auto-scrape **posts AND their comments**, **products AND their reviews**, and **questions AND their answers** (via the shared `gatherVoiceRows` helper in `index.ts`).
+- `export_comments_csv` - Deep-scrape Facebook groups, subreddits, Amazon products, and/or Quora questions/topics to a **CSV**, one row per **post/product/question and comment/review/answer**, linked by a shared `post_id` with a `row_type` of `post`/`comment`/`review`/`answer` (Amazon `post_id` = ASIN, Quora `post_id` = slug). Columns: `platform, source_url, post_id, post_url, row_type, author, timestamp, upvotes, category, text` (ISO timestamps for Reddit; rendered labels for Facebook/Amazon/Quora). The **`upvotes`** column is the per-row crowd-validation signal - Reddit `score` (post+comment), Facebook reactions (`likeCount`), Amazon "found helpful" votes (`helpfulVotes`), Quora answer upvotes; blank when the platform exposed none (populated via the `votesCell` helper in `index.ts`). All four platforms share `gatherVoiceRows` (Facebook: `getGroupComments` feed→post→thread; Reddit: top posts→comments; Amazon: `getProductReviews` per ASIN; Quora: `getQuestion` per question, and `getTopicQuestions`→`getQuestion` per topic, via the `quoraRowsFor` helper). Posts/products/questions are always kept; comments, reviews **and answers** are value-filtered via `isValuableComment` and tagged via `classifyComment` (Amazon reviews additionally fall back to the star rating: ≤2★→pain, ≥4★→desire, via `classifyReview`). CSV serialization in `src/utils/csv.ts`. Output files match `voice-of-customer-*.csv` and are git-ignored (may contain personal data).
 
 ### Server Modes
 
@@ -170,11 +188,13 @@ pnpm lint:fix
 
    > Reality check (validated live, authenticated): the bare-domain search (`q=vitalityextracts.com`, `search_type=keyword_unordered`) returns ~370 tightly-relevant ads and surfaces the brand's **whole connected page network** (e.g. _Vitality Extracts Essential Oils_ + _Families For Wellness_ + _Hair Envy_). A generic word (`seed.com`) matches everywhere (>50k results), so a unique domain is the power query. The session **reuses `FACEBOOK_COOKIE`** by default (auto-pickup via `cookie-extractor.ts`'s `extractMetaAdsCookieHeader`, `%facebook.com`).
 
-7. **Persona Module** (`src/persona/schwartz.ts`): Deterministic voice-of-customer text mining + the Schwartz "Breakthrough Advertising" structuring (awareness distribution, sophistication level, mass desire). **Extraction is deterministic here; synthesis is delegated to the calling LLM** via `buildPersonaBrief`. Platform-agnostic and fully unit-tested.
+7. **Quora Module** (`src/quora/`): Self-contained Q&A scraping subsystem, mirroring the Amazon/Facebook module structure (singleton `Either`/`Option` client, lazy Playwright peer, `ResponseCache`, pacing, `eslint-disable` imperative-boundary headers). Two-tier engine (`browser`/`http`, no paid tier). **DOM-first** (validated against live Quora): `parsers.ts` reads each answer from the browser-rendered DOM (`dom_annotate_question_answer_item_N` wrappers, `.spacing_log_answer_content` bodies, `/profile/` + `/answer/` links, upvote `aria-label`), with a schema.org `QAPage` JSON-LD fallback. `quora-client.ts` methods: `getQuestion` (works logged-out), `searchQuestions` + `getTopicQuestions` (login-gated). **Fully unit-tested** with real-DOM-shaped fixtures. Wired into the persona pipeline via the `quoraRowsFor` helper in `index.ts` (question → `post` row, answer → `answer` row).
 
-> **Imperative-boundary convention:** the Facebook, Amazon **and Meta Ad Library** `parsers.ts`/`engines.ts`/`api-engine.ts`/`tokens.ts`/`downloader.ts`/`transcribe.ts`/`*-client.ts`, plus `schwartz.ts`, carry an `eslint-disable` header for the functype style rules (same convention as `reddit-client.ts`/`response-cache.ts`) because DOM/JSON-walking, external IO, and lexicon scanning are inherently imperative.
+8. **Persona Module** (`src/persona/schwartz.ts`): Deterministic voice-of-customer text mining + the Schwartz "Breakthrough Advertising" structuring (awareness distribution, sophistication level, mass desire). **Extraction is deterministic here; synthesis is delegated to the calling LLM** via `buildPersonaBrief`. Platform-agnostic and fully unit-tested.
 
-> **Optional Playwright peer:** `playwright` is NOT a hard dependency (keeps the base install light and avoids a Chromium download for Reddit-only users). It is lazy-loaded via an indirect dynamic import and marked `deps.neverBundle` in `tsdown.config.ts`. The Facebook, Amazon **and Meta Ad Library** tools degrade to the HTTP engine and give actionable install guidance when it's absent.
+> **Imperative-boundary convention:** the Facebook, Amazon, Quora **and Meta Ad Library** `parsers.ts`/`engines.ts`/`api-engine.ts`/`tokens.ts`/`downloader.ts`/`transcribe.ts`/`*-client.ts`, plus `schwartz.ts`, carry an `eslint-disable` header for the functype style rules (same convention as `reddit-client.ts`/`response-cache.ts`) because DOM/JSON-walking, external IO, and lexicon scanning are inherently imperative.
+
+> **Optional Playwright peer:** `playwright` is NOT a hard dependency (keeps the base install light and avoids a Chromium download for Reddit-only users). It is lazy-loaded via an indirect dynamic import and marked `deps.neverBundle` in `tsdown.config.ts`. The Facebook, Amazon, Quora **and Meta Ad Library** tools degrade to the HTTP engine and give actionable install guidance when it's absent. (Quora in particular is browser-only in practice - plain `fetch` is 403'd.)
 
 ### Authentication Flow
 
@@ -286,6 +306,21 @@ AMAZON_ENGINE=auto               # auto (default), http, browser (Playwright), a
 # AMAZON_USER_AGENT=             # Override the User-Agent
 # AMAZON_CACHE=on                # In-memory response cache (on/off)
 # AMAZON_CACHE_MAX_MB=50         # Cache size cap in MB
+
+# Quora (Q&A threads scraping)
+# EASIEST: run `pnpm run setup` to auto-fill QUORA_COOKIE from your browser (macOS/Linux).
+# Quora is browser-only in practice (plain fetch is 403'd); question pages scrape logged-out, but
+# search/topic feeds are login-gated and exact upvote counts need a session.
+QUORA_COOKIE=                    # Full Cookie header from a logged-in quora.com browser; unlocks search/topic feeds + upvote counts
+# QUORA_COOKIE_FROM=chrome       # Auto-read quora cookies at startup: chrome|brave|edge|arc|chromium|vivaldi|opera
+# QUORA_COOKIE_FROM_PROFILE=Default
+QUORA_ENGINE=auto                # auto (default → browser when Playwright present), http, browser (Playwright)
+# QUORA_MIN_DELAY_MS=5000        # Min delay between Quora requests (anti-bot pacing)
+# QUORA_HEADLESS=true            # Run browser engine headless (true/false)
+# QUORA_LOCALE=en_US             # Preferred locale
+# QUORA_USER_AGENT=              # Override the User-Agent
+# QUORA_CACHE=on                 # In-memory response cache (on/off)
+# QUORA_CACHE_MAX_MB=50          # Cache size cap in MB
 
 # Meta Ad Library (competitor ad spying)
 # The Ad Library is PUBLIC, so no login is needed; by default this reuses FACEBOOK_COOKIE above.

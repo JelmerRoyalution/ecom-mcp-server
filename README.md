@@ -2,7 +2,7 @@
 
 # 🛒 Ecom Customer Research MCP
 
-### Turn real conversations from **Reddit**, **Facebook groups** & **Amazon reviews** into **customer personas** - automatically.
+### Turn real conversations from **Reddit**, **Facebook groups**, **Amazon reviews** & **Quora** into **customer personas** - automatically.
 
 _Listen to your market in their own words. Understand what they really want. Sell with copy that converts._
 
@@ -15,6 +15,7 @@ _Listen to your market in their own words. Understand what they really want. Sel
 ![Reddit](https://img.shields.io/badge/Reddit-FF4500?logo=reddit&logoColor=white)
 ![Facebook](https://img.shields.io/badge/Facebook%20Groups-1877F2?logo=facebook&logoColor=white)
 ![Amazon](https://img.shields.io/badge/Amazon%20Reviews-FF9900?logo=amazon&logoColor=white)
+![Quora](https://img.shields.io/badge/Quora-B92B27?logo=quora&logoColor=white)
 ![Meta Ad Library](https://img.shields.io/badge/Meta%20Ad%20Library-0668E1?logo=meta&logoColor=white)
 ![Chrome](https://img.shields.io/badge/Chrome-4285F4?logo=googlechrome&logoColor=white)
 ![Brave](https://img.shields.io/badge/Brave-FB542B?logo=brave&logoColor=white)
@@ -171,6 +172,18 @@ Just chat with Claude in normal language. **Reddit works instantly; Facebook use
  own words, why people return it."
 ```
 
+**💬 Quora questions & answers:**
+
+```text
+"Scrape this Quora question and summarize the answers in customers' own words:
+ https://www.quora.com/What-are-the-benefits-of-collagen"
+```
+
+```text
+"Search Quora for questions about magnesium for sleep, open the top few,
+ and list the recurring pains and objections people mention."
+```
+
 **🕵️ Meta Ad Library (competitor ad spying):**
 
 ```text
@@ -208,6 +221,7 @@ flowchart LR
     R["👽 Reddit<br/>subreddits & comments"] --> S
     F["📘 Facebook<br/>public & private groups"] --> S
     A["🛒 Amazon<br/>product reviews"] --> S
+    Q["💬 Quora<br/>questions & answers"] --> S
     M["🕵️ Meta Ad Library<br/>competitor ads"] --> S
     S --> V["🗣️ Voice of Customer<br/>pains · desires · objections · quotes"]
     S --> W["🏆 Winning competitor ads<br/>copy · hooks · longest-running"]
@@ -270,6 +284,17 @@ Four toolsets your Claude can use:
 
 > 🛒 **Getting Amazon reviews:** Amazon shows logged-out visitors only a handful of reviews. For the full history, `pnpm run setup` borrows your **amazon.com login** automatically - or, for hands-off reliability at scale, add an `AMAZON_API_KEY` (Unwrangle or Rainforest reviews API). See **Advanced configuration** below.
 
+### 💬 Quora tools · _the questions & answers your customers actually write_
+
+| Tool                        | What it does                                                                                                           |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `quora_get_question`        | Scrape a **question + its answers** (author, full text, upvotes, date) from a Quora URL - **works without login**      |
+| `quora_search`              | **Search a niche** (e.g. "magnesium for sleep") → a list of questions to scrape _(needs your Quora login)_             |
+| `quora_get_topic_questions` | List the questions inside a **Quora topic or Space** - "what does this niche actually ask?" _(needs your Quora login)_ |
+| `test_quora_connection`     | Check your Quora login / engine / Playwright status                                                                    |
+
+> 💬 **Why Quora:** questions are pure voice-of-customer - people literally writing their pains, desires and objections, and long-form answers that mention products by name. A single question page yields ~50 answers. Scraping a **question URL works logged-out**; **search and topic feeds need your Quora login** (`pnpm run setup` borrows it automatically), which also unlocks exact upvote counts. Needs the browser engine (Playwright). See **Advanced configuration** below.
+
 ### 🕵️ Meta Ad Library tools · _spy on any competitor's Facebook & Instagram ads_
 
 | Tool                          | What it does                                                                                                                                                                            |
@@ -281,15 +306,15 @@ Four toolsets your Claude can use:
 
 > 🕵️ **The pro move:** search a competitor's **bare domain** (just `theirbrand.com`, no `https://`). Because the domain is unique, it reveals every Facebook page running ads to that site - including the sneaky advertorial pages brands hide behind. Then sort by **longest-running**: an ad that's been live for months is almost certainly making money. It's **public data** and needs no extra login (it reuses your Facebook one). For hands-off scale, add a `META_ADS_API_KEY` (ScrapeCreators). See **Advanced configuration**.
 
-### 🎯 Customer-persona tools (Schwartz _Breakthrough Advertising_) · _Reddit, Facebook, Amazon, or any mix_
+### 🎯 Customer-persona tools (Schwartz _Breakthrough Advertising_) · _Reddit, Facebook, Amazon, Quora, or any mix_
 
-| Tool                        | What it does                                                                                                                                                                                                                                                                                                                                                                                               |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `analyze_voice_of_customer` | Mine any text into **pains, desires, objections, questions, triggers, quotes**                                                                                                                                                                                                                                                                                                                             |
-| `build_customer_persona`    | Build a full persona brief from **posts + comments + Amazon reviews**: **mass desire**, the **5 awareness stages**, the **5 sophistication levels**, and headline angles                                                                                                                                                                                                                                   |
-| `export_comments_csv`       | Scrape Facebook groups, subreddits, and/or Amazon products to a **CSV** - one row per **post/product and comment/review**, linked by a shared `post_id` (+ `row_type`), with author, timestamp, **`upvotes`** (Reddit score / Facebook reactions / Amazon "found helpful"), category and text. Sort by `upvotes` to rank by social proof, or by `post_id` to group them. Low-value reactions filtered out. |
+| Tool                        | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `analyze_voice_of_customer` | Mine any text into **pains, desires, objections, questions, triggers, quotes**                                                                                                                                                                                                                                                                                                                                                                                            |
+| `build_customer_persona`    | Build a full persona brief from **posts + comments + Amazon reviews + Quora answers**: **mass desire**, the **5 awareness stages**, the **5 sophistication levels**, and headline angles                                                                                                                                                                                                                                                                                  |
+| `export_comments_csv`       | Scrape Facebook groups, subreddits, Amazon products, and/or Quora questions/topics to a **CSV** - one row per **post/product/question and comment/review/answer**, linked by a shared `post_id` (+ `row_type`), with author, timestamp, **`upvotes`** (Reddit score / Facebook reactions / Amazon "found helpful" / Quora answer upvotes), category and text. Sort by `upvotes` to rank by social proof, or by `post_id` to group them. Low-value reactions filtered out. |
 
-> 💡 Mix sources freely - combine Reddit threads, Facebook group discussions, and Amazon reviews into one persona or one CSV.
+> 💡 Mix sources freely - combine Reddit threads, Facebook group discussions, Amazon reviews, and Quora answers into one persona or one CSV.
 
 ## 🧠 The framework: why "personas," done right
 

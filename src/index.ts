@@ -17,6 +17,7 @@ import {
   extractAmazonCookieHeader,
   extractFacebookSession,
   extractMetaAdsCookieHeader,
+  extractQuoraCookieHeader,
   extractRedditCookieHeader,
 } from "./facebook/cookie-extractor"
 import { buildSessionFromCookies, buildSessionFromParts } from "./facebook/cookies"
@@ -39,6 +40,11 @@ import type {
   MetaTranscribeMode,
 } from "./meta-ads/types"
 import { buildPersonaBrief, classifyComment, isValuableComment, mineVoiceOfCustomer } from "./persona/schwartz"
+import { buildQuoraSessionFromCookie } from "./quora/cookies"
+import { formatQuestionCards, formatQuestionWithAnswers } from "./quora/format"
+import { buildTopicUrl } from "./quora/parsers"
+import { getQuoraClient, initializeQuoraClient } from "./quora/quora-client"
+import type { QuoraEngine, QuoraQuestionWithAnswers, QuoraSession } from "./quora/types"
 import type { BotDisclosureConfig, CacheConfig, RedditAuthMode, RedditSafeMode, SafeModeConfig } from "./types"
 import { toCsv } from "./utils/csv"
 import { formatPostInfo, formatSubredditInfo, formatUserInfo } from "./utils/formatters"
@@ -49,6 +55,10 @@ const DEFAULT_FACEBOOK_UA =
 
 // A current desktop Chrome UA - used for Amazon fetches when none is provided.
 const DEFAULT_AMAZON_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+// A current desktop Chrome UA - used for Quora fetches when none is provided.
+const DEFAULT_QUORA_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
 // Load environment variables
@@ -139,6 +149,12 @@ function unwrapAmazonClient() {
 function unwrapMetaAdsClient() {
   return getMetaAdsClient().orThrow(
     new Error("Meta Ad Library client not initialized - restart the server with Meta Ads support enabled."),
+  )
+}
+
+function unwrapQuoraClient() {
+  return getQuoraClient().orThrow(
+    new Error("Quora client not initialized - restart the server with Quora support enabled."),
   )
 }
 
@@ -337,6 +353,92 @@ async function setupAmazonClient(): Promise<void> {
   } else {
     console.error("[Setup] Amazon: no session/API - the HTTP engine reads the first (public) pages of reviews")
     console.error("[Setup]   For depth: set AMAZON_COOKIE (logged-in header) or AMAZON_API_KEY (reviews API)")
+  }
+}
+
+// Build a Quora session from env: an explicit cookie header, or - when QUORA_COOKIE_FROM is set -
+// auto-extracted from a locally logged-in browser (macOS/Linux). A session is optional: without
+// one, only a question's first (public) answers are reliably reachable.
+async function resolveQuoraSession(): Promise<QuoraSession | undefined> {
+  const cookie = process.env.QUORA_COOKIE
+  if (cookie !== undefined && cookie.trim() !== "") {
+    return buildQuoraSessionFromCookie(cookie).fold(
+      (err) => {
+        console.error(`[Quora] ${err.message}`)
+        return undefined
+      },
+      (session) => session,
+    )
+  }
+
+  const from = process.env.QUORA_COOKIE_FROM
+  if (from !== undefined && from.trim() !== "") {
+    try {
+      const header = await extractQuoraCookieHeader({
+        browser: from.trim() as BrowserKey,
+        profile: process.env.QUORA_COOKIE_FROM_PROFILE ?? process.env.FACEBOOK_COOKIE_FROM_PROFILE ?? "Default",
+      })
+      if (header === "") {
+        console.error(`[Quora] No quora.com cookies found in ${from} (log in to quora.com in that browser first).`)
+        return undefined
+      }
+      return buildQuoraSessionFromCookie(header).fold(
+        (err) => {
+          console.error(`[Quora] ${err.message}`)
+          return undefined
+        },
+        (session) => {
+          console.error(`[Quora] ✓ Auto-loaded session cookies from ${from}`)
+          return session
+        },
+      )
+    } catch (err) {
+      console.error(
+        `[Quora] Could not auto-read cookies from ${from}: ${err instanceof Error ? err.message : String(err)}`,
+      )
+      return undefined
+    }
+  }
+
+  return undefined
+}
+
+// Initialize the Quora scraping client (always available; depth via a logged-in session cookie).
+async function setupQuoraClient(): Promise<void> {
+  const engine = (process.env.QUORA_ENGINE ?? "auto") as QuoraEngine
+  if (!["auto", "http", "browser"].includes(engine)) {
+    console.error(`[Error] Invalid QUORA_ENGINE: ${engine}`)
+    console.error("[Error] Valid options are: auto, http, browser")
+    process.exit(1)
+  }
+
+  const session = await resolveQuoraSession()
+  const minDelayRaw = Number(process.env.QUORA_MIN_DELAY_MS ?? "5000")
+  const cacheEnabled = (process.env.QUORA_CACHE ?? "on") !== "off"
+  const cacheMaxMb = Number(process.env.QUORA_CACHE_MAX_MB ?? "50")
+
+  initializeQuoraClient({
+    session,
+    engine,
+    userAgent: process.env.QUORA_USER_AGENT ?? DEFAULT_QUORA_UA,
+    minDelayMs: Number.isFinite(minDelayRaw) && minDelayRaw >= 0 ? minDelayRaw : 5000,
+    headless: (process.env.QUORA_HEADLESS ?? "true") !== "false",
+    locale: process.env.QUORA_LOCALE ?? "en_US",
+    cache: {
+      enabled: cacheEnabled,
+      maxBytes: (Number.isFinite(cacheMaxMb) && cacheMaxMb > 0 ? cacheMaxMb : 50) * 1024 * 1024,
+    },
+  })
+
+  console.error("[Setup] Quora client initialized")
+  console.error(`[Setup] Quora engine: ${engine}`)
+  if (session !== undefined) {
+    console.error("[Setup] ✓ Quora session cookies loaded - can read deeper into answer threads")
+  } else {
+    console.error(
+      "[Setup] Quora: no session - question pages parse from embedded JSON-LD; search/topic feeds are gated",
+    )
+    console.error("[Setup]   For depth: set QUORA_COOKIE (logged-in header) or run `pnpm run setup`")
   }
 }
 
@@ -596,8 +698,8 @@ const server = new FastMCP({
   name: "reddit-mcp-server",
   version: VERSION,
   instructions: `An e-commerce customer-research MCP server. It scrapes discussions from Reddit, Facebook
-groups, AND Amazon product reviews, then turns them into customer personas using Eugene Schwartz's
-"Breakthrough Advertising" framework.
+groups, Amazon product reviews, AND Quora Q&A, then turns them into customer personas using Eugene
+Schwartz's "Breakthrough Advertising" framework.
 
 Reddit capabilities:
 - Fetch Reddit posts, comments, and user information
@@ -622,20 +724,27 @@ Amazon capabilities (tools prefixed amazon_*):
 - The free HTTP engine reads the first public pages; for full review history set AMAZON_COOKIE
   (a logged-in session) or AMAZON_API_KEY (a reviews API: Unwrangle or Rainforest)
 
+Quora capabilities (tools prefixed quora_*):
+- Scrape a question and its answers by URL/slug (answer author, body, upvote count, date) - Quora
+  questions are pure voice-of-customer: people literally stating their pains, desires and questions
+- Search Quora for questions in a niche, or list the questions in a topic/Space
+- Question pages parse from embedded JSON-LD even logged-out; search/topic feeds and deep answer
+  threads are gated, so for those set QUORA_COOKIE from a logged-in browser (browser engine)
+
 Customer-persona workflow (Schwartz "Breakthrough Advertising"):
 - analyze_voice_of_customer: mine a corpus of comments/posts/reviews into pains, desires, objections,
   questions, emotional triggers, product mentions, and verbatim quotes
 - build_customer_persona: assemble a persona brief organized by mass desire, the 5 awareness stages, and
   the 5 market-sophistication levels - then synthesize the persona from that evidence
-- These persona tools are platform-agnostic: feed them text scraped from Reddit, Facebook, Amazon, or all.
+- These persona tools are platform-agnostic: feed them text scraped from Reddit, Facebook, Amazon, Quora, or all.
 
 For Reddit write operations (posting, replying, editing, deleting), ensure REDDIT_USERNAME and REDDIT_PASSWORD are configured.
 
 IMPORTANT - research data ethics:
 - Scraped discussion is for aggregate customer-persona research only. Do NOT de-anonymize, profile, or
   re-identify individuals, and do NOT republish people's verbatim posts/comments/reviews as-is.
-- Respect Facebook's, Reddit's, and Amazon's Terms; only access private groups you are legitimately a
-  member of, and use your own logged-in session for any Amazon depth scraping.
+- Respect Facebook's, Reddit's, Amazon's, and Quora's Terms; only access private groups you are
+  legitimately a member of, and use your own logged-in session for any depth scraping.
 
 IMPORTANT - Reddit Responsible Builder Policy compliance:
 - Data retrieved via these tools must NOT be used for AI model training without Reddit's written approval
@@ -1730,6 +1839,115 @@ server.addTool({
   },
 })
 
+// ───────────────────────────── Quora tools ─────────────────────────────
+// These scrape Quora Q&A threads for e-commerce customer research. Quora embeds answers as
+// schema.org QAPage JSON-LD, so question pages parse even logged-out; search/topic feeds and deep
+// answer threads are gated, so for those set QUORA_COOKIE from a logged-in browser (browser engine).
+
+server.addTool({
+  name: "test_quora_connection",
+  description: "Check Quora scraping configuration: session cookies, engine, and Playwright availability.",
+  parameters: z.object({}),
+  execute: async () => {
+    const client = getQuoraClient()
+    const hasClient = client.fold(
+      () => false,
+      () => true,
+    )
+    if (!hasClient) {
+      return "Quora client not initialized."
+    }
+    const quora = client.orThrow(new Error("Quora client not initialized"))
+    const engine = await quora.activeEngineName()
+    const playwright = await isPlaywrightAvailable()
+
+    return `Quora Scraper Status:
+- Session (cookies): ${quora.hasSession() ? "✓ loaded (can read deeper answer threads + search/topic feeds)" : "✗ none (question pages only, from embedded JSON-LD)"}
+- Active engine: ${engine}
+- Playwright browser engine: ${playwright ? "✓ available" : "✗ not installed"}
+
+${quora.hasSession() ? "" : "Tip: for search/topic feeds and deeper threads, set QUORA_COOKIE from a logged-in browser (run `pnpm run setup`)."}`
+  },
+})
+
+server.addTool({
+  name: "quora_search",
+  description:
+    "Search Quora for questions matching a query (e.g. a niche like 'magnesium for sleep'). Returns question " +
+    "titles and URLs to feed into quora_get_question - Quora questions are pure voice-of-customer (people stating " +
+    "their pains/desires/questions). Quora search is gated when logged out, so it's most reliable with a logged-in " +
+    "QUORA_COOKIE + the browser engine (run `pnpm run setup`).",
+  parameters: z.object({
+    query: z.string().describe("Search query, e.g. a product niche or customer question"),
+    limit: z.number().min(1).max(50).default(15).describe("Maximum number of questions to return"),
+  }),
+  execute: async (args) => {
+    const quora = unwrapQuoraClient()
+    if (args.query.trim() === "") {
+      // eslint-disable-next-line functype/prefer-either
+      throw new Error("Search query cannot be empty")
+    }
+    const result = await quora.searchQuestions(args.query, { limit: args.limit })
+    return result.fold(
+      (err) => {
+        // eslint-disable-next-line functype/prefer-either
+        throw new Error(err.message)
+      },
+      (questions) => formatQuestionCards(`Quora Search: "${args.query}"`, questions),
+    )
+  },
+})
+
+server.addTool({
+  name: "quora_get_question",
+  description:
+    "Scrape a Quora question and its answers to mine voice-of-customer language. Pass a quora.com question URL or " +
+    "its slug. Returns the question plus individual answers (author, body, upvote count, date) - the upvote count is " +
+    "the crowd-validation signal. Question pages parse from embedded JSON-LD even logged-out; deeper threads need a " +
+    "logged-in QUORA_COOKIE with the browser engine.",
+  parameters: z.object({
+    question: z
+      .string()
+      .describe("A quora.com question URL (or its slug, e.g. 'What-is-the-best-magnesium-for-sleep')"),
+    limit: z.number().min(1).max(200).default(50).describe("Maximum number of answers to retrieve"),
+  }),
+  execute: async (args) => {
+    const quora = unwrapQuoraClient()
+    const result = await quora.getQuestion(args.question, { maxAnswers: args.limit })
+    return result.fold(
+      (err) => {
+        // eslint-disable-next-line functype/prefer-either
+        throw new Error(err.message)
+      },
+      (data) => formatQuestionWithAnswers(data),
+    )
+  },
+})
+
+server.addTool({
+  name: "quora_get_topic_questions",
+  description:
+    "Fetch the questions in a Quora topic or Space - the highest-signal 'what does this niche actually ask?' query. " +
+    "Pass a topic name (e.g. 'Magnesium'), a /topic/... URL, or a Space (q/<slug>) URL. Returns question cards to " +
+    "feed into quora_get_question. Topic feeds are JS-heavy, so most reliable with a logged-in QUORA_COOKIE + the " +
+    "browser engine (run `pnpm run setup`).",
+  parameters: z.object({
+    topic: z.string().describe("A topic name, a quora.com /topic/... URL, or a Space (q/<slug>) URL"),
+    limit: z.number().min(1).max(50).default(25).describe("Maximum number of questions to return"),
+  }),
+  execute: async (args) => {
+    const quora = unwrapQuoraClient()
+    const result = await quora.getTopicQuestions(args.topic, { limit: args.limit })
+    return result.fold(
+      (err) => {
+        // eslint-disable-next-line functype/prefer-either
+        throw new Error(err.message)
+      },
+      (questions) => formatQuestionCards(`Quora Topic: "${args.topic}"`, questions),
+    )
+  },
+})
+
 // ──────────────── Meta Ad Library tools (competitor ad spying) ────────────────
 // Scrape the public Meta (Facebook/Instagram) Ad Library: find a brand's advertiser pages by its
 // bare domain, then fetch their ads with copy/CTA/media. Most robust with META_ADS_ENGINE=browser
@@ -1960,19 +2178,22 @@ ${list(voc.quotes)}`)
 /* eslint-disable functype/no-imperative-loops, functype/prefer-map -- these tools fan out over
    sources/posts/comments and accumulate rows; nested loops are the clearest expression. */
 
-// One flat row of voice-of-customer data. Each post/product emits a row_type="post" row, then
-// its comments (row_type="comment") or reviews (row_type="review") sharing the same post_id - so
-// the parent<->child relationship is explicit (group or sort by post_id). For Amazon, the
-// product is the "post" (post_id = ASIN) and each review is a "review" row.
+// One flat row of voice-of-customer data. Each post/product/question emits a row_type="post" row,
+// then its comments (row_type="comment"), reviews (row_type="review"), or Quora answers
+// (row_type="answer") sharing the same post_id - so the parent<->child relationship is explicit
+// (group or sort by post_id). For Amazon, the product is the "post" (post_id = ASIN) and each
+// review is a "review" row. For Quora, the question is the "post" (post_id = slug) and each answer
+// is an "answer" row (with any answer comments as "comment" rows under the same post_id).
 //
 // `upvotes` is the platform's social-proof signal so you can rank by what the crowd validated:
-// Reddit = comment/post score, Facebook = reactions/likes, Amazon = "found helpful" votes.
+// Reddit = comment/post score, Facebook = reactions/likes, Amazon = "found helpful" votes,
+// Quora = answer upvotes.
 type VocRow = {
-  platform: "facebook" | "reddit" | "amazon"
+  platform: "facebook" | "reddit" | "amazon" | "quora"
   source_url: string
   post_id: string
   post_url: string
-  row_type: "post" | "comment" | "review"
+  row_type: "post" | "comment" | "review" | "answer"
   author: string
   timestamp: string
   upvotes: string
@@ -2014,14 +2235,68 @@ function classifyReview(text: string, rating: number | undefined): string {
   return "other"
 }
 
-// Deep-scrape posts AND their comment threads from Facebook groups, subreddits, and/or Amazon
-// products (each Amazon product becomes a "post" row with its reviews as "review" rows).
+// Flatten a scraped Quora question into VocRows: the question as a "post", each answer as an
+// "answer" row, and any answer comments as "comment" rows - all sharing the question slug as post_id.
+function quoraRowsFor(data: QuoraQuestionWithAnswers, sourceUrl: string): VocRow[] {
+  const rows: VocRow[] = []
+  const postId = data.question.slug
+  const postUrl = data.question.url
+  rows.push({
+    platform: "quora",
+    source_url: sourceUrl,
+    post_id: postId,
+    post_url: postUrl,
+    row_type: "post",
+    author: "",
+    timestamp: "",
+    upvotes: "",
+    category: classifyComment(data.question.title),
+    text: oneLineText(data.question.title),
+  })
+  for (const answer of data.answers) {
+    const answerUrl = answer.permalink ?? postUrl
+    rows.push({
+      platform: "quora",
+      source_url: sourceUrl,
+      post_id: postId,
+      post_url: answerUrl,
+      row_type: "answer",
+      author: answer.author,
+      timestamp: answer.date ?? "",
+      upvotes: votesCell(answer.upvotes),
+      category: classifyComment(answer.body),
+      text: oneLineText(answer.body),
+    })
+    for (const c of answer.comments ?? []) {
+      rows.push({
+        platform: "quora",
+        source_url: sourceUrl,
+        post_id: postId,
+        post_url: answerUrl,
+        row_type: "comment",
+        author: c.author,
+        timestamp: "",
+        upvotes: votesCell(c.upvotes),
+        category: classifyComment(c.body),
+        text: oneLineText(c.body),
+      })
+    }
+  }
+  return rows
+}
+
+// Deep-scrape posts AND their comment threads from Facebook groups, subreddits, Amazon products,
+// and/or Quora questions/topics (each Amazon product becomes a "post" row with its reviews as
+// "review" rows; each Quora question becomes a "post" row with its answers as "answer" rows).
 async function gatherVoiceRows(opts: {
   readonly facebookGroups: readonly string[]
   readonly subreddits: readonly string[]
   readonly amazonProducts: readonly string[]
+  readonly quoraQuestions: readonly string[]
+  readonly quoraTopics: readonly string[]
   readonly postsPerSource: number
   readonly amazonReviewLimit: number
+  readonly quoraAnswerLimit: number
   readonly redditTime: string
   readonly amazonSort: string
   readonly errors: string[]
@@ -2166,6 +2441,42 @@ async function gatherVoiceRows(opts: {
     )
   }
 
+  for (const ref of opts.quoraQuestions) {
+    const quora = unwrapQuoraClient()
+    const result = await quora.getQuestion(ref, { maxAnswers: opts.quoraAnswerLimit })
+    result.fold(
+      (err) => {
+        opts.errors.push(`Quora "${ref}": ${err.message}`)
+      },
+      (data) => {
+        rows.push(...quoraRowsFor(data, data.question.url))
+      },
+    )
+  }
+
+  // For a topic/Space, list its questions then open each (capped at postsPerSource) for its answers.
+  for (const topic of opts.quoraTopics) {
+    const quora = unwrapQuoraClient()
+    const topicUrl = buildTopicUrl(topic)
+    const listResult = await quora.getTopicQuestions(topic, { limit: opts.postsPerSource })
+    const questions = listResult.fold(
+      (err) => {
+        opts.errors.push(`Quora topic "${topic}": ${err.message}`)
+        return []
+      },
+      (q) => q,
+    )
+    for (const question of questions) {
+      const result = await quora.getQuestion(question.url, { maxAnswers: opts.quoraAnswerLimit })
+      result.fold(
+        () => undefined,
+        (data) => {
+          rows.push(...quoraRowsFor(data, topicUrl))
+        },
+      )
+    }
+  }
+
   return rows
 }
 
@@ -2173,9 +2484,10 @@ server.addTool({
   name: "build_customer_persona",
   description:
     "Build a Schwartz 'Breakthrough Advertising' customer persona brief from customer discussion. Provide raw " +
-    "'texts' and/or a 'facebook_group'/'subreddits'/'amazon_products' to auto-scrape (it pulls POSTS *and* their " +
-    "COMMENTS, and Amazon products *and* their REVIEWS). Returns mined evidence organized into mass desire, " +
-    "awareness stages, and market sophistication, plus synthesis steps.",
+    "'texts' and/or a 'facebook_group'/'subreddits'/'amazon_products'/'quora_questions'/'quora_topics' to auto-scrape " +
+    "(it pulls POSTS *and* their COMMENTS, Amazon products *and* their REVIEWS, and Quora questions *and* their " +
+    "ANSWERS). Returns mined evidence organized into mass desire, awareness stages, and market sophistication, plus " +
+    "synthesis steps.",
   parameters: z.object({
     texts: z.array(z.string()).default([]).describe("Raw customer discussion snippets to analyze (optional)"),
     facebook_group: z.string().optional().describe("Optional Facebook group id/slug/URL - posts + comments scraped"),
@@ -2184,8 +2496,22 @@ server.addTool({
       .array(z.string())
       .default([])
       .describe("Optional Amazon ASINs or product URLs to scrape reviews from"),
-    posts_per_source: z.number().min(1).max(100).default(25).describe("Posts to open per Facebook/Reddit source"),
+    quora_questions: z
+      .array(z.string())
+      .default([])
+      .describe("Optional Quora question URLs/slugs to scrape answers from"),
+    quora_topics: z
+      .array(z.string())
+      .default([])
+      .describe("Optional Quora topic names or topic/Space URLs to scrape questions + answers from"),
+    posts_per_source: z
+      .number()
+      .min(1)
+      .max(100)
+      .default(25)
+      .describe("Posts/questions to open per Facebook/Reddit/Quora-topic source"),
     amazon_review_limit: z.number().min(1).max(500).default(50).describe("Reviews to pull per Amazon product"),
+    quora_answer_limit: z.number().min(1).max(200).default(50).describe("Answers to pull per Quora question"),
     reddit_time: z
       .enum(["hour", "day", "week", "month", "year", "all"])
       .default("month")
@@ -2197,20 +2523,27 @@ server.addTool({
     const fbGroups =
       args.facebook_group !== undefined && args.facebook_group.trim() !== "" ? [args.facebook_group.trim()] : []
     const rows =
-      fbGroups.length > 0 || args.subreddits.length > 0 || args.amazon_products.length > 0
+      fbGroups.length > 0 ||
+      args.subreddits.length > 0 ||
+      args.amazon_products.length > 0 ||
+      args.quora_questions.length > 0 ||
+      args.quora_topics.length > 0
         ? await gatherVoiceRows({
             facebookGroups: fbGroups,
             subreddits: args.subreddits,
             amazonProducts: args.amazon_products,
+            quoraQuestions: args.quora_questions,
+            quoraTopics: args.quora_topics,
             postsPerSource: args.posts_per_source,
             amazonReviewLimit: args.amazon_review_limit,
+            quoraAnswerLimit: args.quora_answer_limit,
             redditTime: args.reddit_time,
             amazonSort: "recent",
             errors,
           })
         : []
 
-    // Feed posts plus valuable comments/reviews into the persona corpus.
+    // Feed posts plus valuable comments/reviews/answers into the persona corpus.
     const scrapedTexts = rows
       .filter((r) => r.text.trim().length > 0 && (r.row_type === "post" || isValuableComment(r.text)))
       .map((r) => r.text)
@@ -2218,7 +2551,8 @@ server.addTool({
     if (texts.length === 0) {
       // eslint-disable-next-line functype/prefer-either
       throw new Error(
-        "Provide 'texts' and/or a 'facebook_group'/'subreddits'/'amazon_products' with accessible content.",
+        "Provide 'texts' and/or a 'facebook_group'/'subreddits'/'amazon_products'/'quora_questions'/'quora_topics' " +
+          "with accessible content.",
       )
     }
 
@@ -2226,6 +2560,8 @@ server.addTool({
       ...fbGroups.map((g) => `FB:${g}`),
       ...args.subreddits.map((s) => `r/${s.replace(/^r\//i, "")}`),
       ...args.amazon_products.map((p) => `AMZN:${p}`),
+      ...args.quora_questions.map((q) => `QUORA:${q}`),
+      ...args.quora_topics.map((t) => `QUORA-TOPIC:${t}`),
     ]
     const sourceLabel =
       sources.length > 0
@@ -2239,12 +2575,13 @@ server.addTool({
 server.addTool({
   name: "export_comments_csv",
   description:
-    "Scrape Facebook groups, Reddit subreddits, and/or Amazon products to a CSV - one row per POST/PRODUCT and per " +
-    "COMMENT/REVIEW, linked by a shared post_id (row_type 'post', 'comment', or 'review'; Amazon post_id = ASIN). " +
-    "Columns: platform, source_url, post_id, post_url, row_type, author, timestamp, upvotes, category " +
-    "(pain/desire/objection/question/other), text. The 'upvotes' column is the crowd-validation signal (Reddit " +
-    "score, Facebook reactions, Amazon 'found helpful' votes) - sort by it to rank pains/desires by social proof. " +
-    "Sort by post_id to see each post with its comments/reviews. Low-value reactions are filtered out by default.",
+    "Scrape Facebook groups, Reddit subreddits, Amazon products, and/or Quora questions/topics to a CSV - one row " +
+    "per POST/PRODUCT/QUESTION and per COMMENT/REVIEW/ANSWER, linked by a shared post_id (row_type 'post', 'comment', " +
+    "'review', or 'answer'; Amazon post_id = ASIN, Quora post_id = slug). Columns: platform, source_url, post_id, " +
+    "post_url, row_type, author, timestamp, upvotes, category (pain/desire/objection/question/other), text. The " +
+    "'upvotes' column is the crowd-validation signal (Reddit score, Facebook reactions, Amazon 'found helpful' votes, " +
+    "Quora answer upvotes) - sort by it to rank pains/desires by social proof. Sort by post_id to see each post with " +
+    "its comments/reviews/answers. Low-value reactions are filtered out by default.",
   parameters: z.object({
     facebook_groups: z
       .array(z.string())
@@ -2252,14 +2589,25 @@ server.addTool({
       .describe("Facebook group ids, slugs, or URLs to scrape (must be a member of private ones)"),
     subreddits: z.array(z.string()).default([]).describe("Subreddit names to scrape (without the r/)"),
     amazon_products: z.array(z.string()).default([]).describe("Amazon ASINs or product URLs to scrape reviews from"),
+    quora_questions: z.array(z.string()).default([]).describe("Quora question URLs/slugs to scrape answers from"),
+    quora_topics: z
+      .array(z.string())
+      .default([])
+      .describe("Quora topic names or topic/Space URLs to scrape questions + answers from"),
     posts_per_source: z
       .number()
       .min(1)
       .max(200)
       .default(30)
-      .describe("How many recent posts to open per FB/Reddit source"),
+      .describe("How many recent posts/questions to open per FB/Reddit/Quora-topic source"),
     amazon_review_limit: z.number().min(1).max(500).default(50).describe("How many reviews to pull per Amazon product"),
-    min_words: z.number().min(1).max(50).default(4).describe("Minimum words for a comment/review to count as valuable"),
+    quora_answer_limit: z.number().min(1).max(200).default(50).describe("How many answers to pull per Quora question"),
+    min_words: z
+      .number()
+      .min(1)
+      .max(50)
+      .default(4)
+      .describe("Minimum words for a comment/review/answer to count as valuable"),
     include_low_value: z.boolean().default(false).describe("Keep low-signal reactions too (default: filter them out)"),
     reddit_time: z
       .enum(["hour", "day", "week", "month", "year", "all"])
@@ -2271,9 +2619,17 @@ server.addTool({
       .describe("Where to save the CSV (default: ./voice-of-customer-<timestamp>.csv in the project folder)"),
   }),
   execute: async (args) => {
-    if (args.facebook_groups.length === 0 && args.subreddits.length === 0 && args.amazon_products.length === 0) {
+    if (
+      args.facebook_groups.length === 0 &&
+      args.subreddits.length === 0 &&
+      args.amazon_products.length === 0 &&
+      args.quora_questions.length === 0 &&
+      args.quora_topics.length === 0
+    ) {
       // eslint-disable-next-line functype/prefer-either
-      throw new Error("Provide at least one entry in facebook_groups, subreddits, or amazon_products.")
+      throw new Error(
+        "Provide at least one entry in facebook_groups, subreddits, amazon_products, quora_questions, or quora_topics.",
+      )
     }
 
     const errors: string[] = []
@@ -2281,8 +2637,11 @@ server.addTool({
       facebookGroups: args.facebook_groups,
       subreddits: args.subreddits,
       amazonProducts: args.amazon_products,
+      quoraQuestions: args.quora_questions,
+      quoraTopics: args.quora_topics,
       postsPerSource: args.posts_per_source,
       amazonReviewLimit: args.amazon_review_limit,
+      quoraAnswerLimit: args.quora_answer_limit,
       redditTime: args.reddit_time,
       amazonSort: "recent",
       errors,
@@ -2325,9 +2684,11 @@ server.addTool({
     const postCount = kept.filter((r) => r.row_type === "post").length
     const commentCount = kept.filter((r) => r.row_type === "comment").length
     const reviewCount = kept.filter((r) => r.row_type === "review").length
+    const answerCount = kept.filter((r) => r.row_type === "answer").length
     const fbCount = kept.filter((r) => r.platform === "facebook").length
     const redditCount = kept.filter((r) => r.platform === "reddit").length
     const amazonCount = kept.filter((r) => r.platform === "amazon").length
+    const quoraCount = kept.filter((r) => r.platform === "quora").length
     const cats = ["pain", "desire", "objection", "question", "other"]
       .map((cat) => `${cat}=${kept.filter((r) => r.category === cat).length}`)
       .join(", ")
@@ -2338,10 +2699,10 @@ server.addTool({
 
     return `# Voice-of-Customer CSV exported ✅
 
-Saved **${kept.length}** rows (${postCount} posts/products + ${commentCount} comments + ${reviewCount} reviews) to:
+Saved **${kept.length}** rows (${postCount} posts/products/questions + ${commentCount} comments + ${reviewCount} reviews + ${answerCount} answers) to:
 \`${target}\`
 
-- Platform: facebook=${fbCount}, reddit=${redditCount}, amazon=${amazonCount}
+- Platform: facebook=${fbCount}, reddit=${redditCount}, amazon=${amazonCount}, quora=${quoraCount}
 - Category: ${cats}
 - Columns: ${VOC_COLUMNS.join(", ")}
 - 🔗 Each comment/review links to its post/product via **post_id** (sort by post_id to group them).
@@ -2357,6 +2718,7 @@ async function main() {
   await setupRedditClient()
   await setupFacebookClient()
   await setupAmazonClient()
+  await setupQuoraClient()
   await setupMetaAdsClient()
 
   const useHttp = process.env.TRANSPORT_TYPE === "httpStream" || process.env.TRANSPORT_TYPE === "http"
